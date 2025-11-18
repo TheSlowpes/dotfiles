@@ -42,7 +42,7 @@
 # resize-overlay-duration = 4s 200ms
 #
 # COMMAND
-command = /usr/bin/zsh
+command = /bin/zsh
 
 # FONT CONFIGURATION
 font-family = "Terminess Nerd Font Mono"
@@ -53,6 +53,13 @@ theme = "tokyonight"
 
 # DISABLE CLOSE SURFACE
 confirm-close-surface = false
+
+# Disable mouse wheel scroll
+mouse-scroll-multiplier = 0
+
+# Cursor style
+cursor-style = "block"
+shell-integration-features = no-cursor
 
 # Disable Alt + Number keybindings to switch tabs
 keybind = alt+1=unbind

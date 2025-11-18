@@ -73,7 +73,7 @@ return {
                 description = "Accept Change",
               },
               reject_change = {
-                modes = { n = "<C-k>" },
+                modes = { n = "<C-h>" },
                 index = 2,
                 callback = "keymap.reject_change",
                 description = "Reject Change",
@@ -138,21 +138,7 @@ return {
         },
       }
       )
-      vim.keymap.set("n", "<leader>a", "<cmd>CodeCompanionChat Toggle<cr>", { desc = "Code Companion: Chat" })
-      vim.keymap.set(
-        "n",
-        "<leader>cc",
-        "<cmd>CodeCompanionChat copilot<cr>",
-        { desc = "[C]ode Companion: [C]opilot" }
-      )
-      vim.keymap.set(
-        "n",
-        "<leader>cg",
-        "<cmd>CodeCompanionChat gemini<cr>",
-        { desc = "[C]ode Companion: [G]emini" }
-      )
-      -- vim.keymap.set("v", "<leader>ci", "<cmd>CodeCompanion<cr>", { desc = "[C]ode Companion: [I]nline Chat" })
-      -- vim.keymap.set("n", "<leader>ci", "<cmd>CodeCompanion<cr>", { desc = "[C]ode Companion: [I]nline Chat" })
+      vim.keymap.set("n", "<leader>cc", "<cmd>CodeCompanionChat Toggle<cr>", { desc = "[C]ode Companion: [C]hat" })
     end,
   },
 }

@@ -17,6 +17,8 @@ vim.keymap.set("n", "<leader>q", vim.diagnostic.setloclist, { desc = "Open diagn
 -- Exit terminal
 vim.keymap.set("t", "<Esc><Esc>", "<C-\\><C-n>", { desc = "Exit terminal mode" })
 
+-- Insert mode keymaps
+vim.keymap.set("i", "jj", "<Esc>", { desc = "Exit insert mode" })
 
 -- Navigation
 

@@ -3,7 +3,6 @@ return {
     "nvim-lualine/lualine.nvim",
     dependencies = { "nvim-tree/nvim-web-devicons" },
     config = function()
-      local codecompanion = require("custom.plugins.lualine.codecompanion_component")
       require("lualine").setup({
         options = {
           icons_enabled = true,
@@ -53,9 +52,6 @@ return {
         },
         winbar = {
           lualine_x = { "lsp_status" },
-          lualine_z = {
-            codecompanion,
-          },
         },
       })
     end,

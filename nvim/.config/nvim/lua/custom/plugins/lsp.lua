@@ -145,6 +145,12 @@ return {
               }
             })
           end,
+          ["sqlls"] = function()
+            require("lspconfig").sqlls.setup({
+              capabilities = capabilities,
+              filetypes = { "sql", "mysql", "pgsql" },
+            })
+          end,
         },
       })
     end,
@@ -239,8 +245,9 @@ return {
         })
       })
 
-      cmp.setup.filetype({ "sql" }, {
+      cmp.setup.filetype({ "sql", "mysql", "plsql" }, {
         sources = {
+          { name = "nvim_lsp" },
           { name = "vim-dadbod-completion" },
           { name = "buffer" },
         },
