@@ -39,9 +39,9 @@ return {
     end,
   },
   {
-    "MeanderingProgrammer/render-markdown.nvim",
-    dependencies = { "nvim-treesitter/nvim-treesitter", "nvim-tree/nvim-web-devicons" },
-    ft = { "markdown", "codecompanion" },
-    opts = {},
+    "saghen/blink.indent",
+    --- @module 'blink.indent'
+    --- @type blink.indent.Config
+    -- opts = {}
   },
 }
