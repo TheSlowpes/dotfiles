@@ -1,23 +1,48 @@
 return {
-  -- LSP Configuration and Servers
   {
-    "neovim/nvim-lspconfig",
-    dependencies = {
-      { "mason-org/mason.nvim", opts = {} },
-      "mason-org/mason-lspconfig.nvim",
-      "WhoIsSethDaniel/mason-tool-installer.nvim",
-      { "j-hui/fidget.nvim",    opts = {} },
-      {
-        "folke/lazydev.nvim",
-        ft = "lua",
-        opts = {
-          library = {
-            { path = "${3rd}/luv/library", words = { "vim%.uv" } },
-          }
-        }
-      }
+    "folke/lazydev.nvim",
+    ft = "lua",
+    opts = {
+      library = {
+        { path = "${3rd}/luv/library", words = { "vim%.uv" } },
+      },
     },
-    config = function()
+  },
+
+  -- Mason for installing LSP servers
+  {
+    "mason-org/mason.nvim",
+    lazy = false,
+    opts = {},
+  },
+
+  -- Fidget for LSP progress
+  {
+    "j-hui/fidget.nvim",
+    opts = {},
+  },
+
+  -- Native LSP Setup
+  {
+    "mason-org/mason-lspconfig.nvim",
+    lazy = false,
+    dependencies = {
+      "mason-org/mason.nvim",
+    },
+    opts = {
+      -- Automatically install these servers
+      ensure_installed = {
+        "lua_ls",
+        "pyright",
+        "eslint",
+        "gopls",
+        "ts_ls",
+        "sqls",
+      },
+    },
+    config = function(_, opts)
+      require("mason-lspconfig").setup(opts)
+
       -- General LSP settings and keymaps
       vim.api.nvim_create_autocmd("LspAttach", {
         callback = function(event)
@@ -37,7 +62,6 @@ return {
           map("grt", require("telescope.builtin").lsp_type_definitions, "[G]oto [T]ype Definition")
           map("K", vim.lsp.buf.hover, "Hover Documentation")
           map("<leader>ca", vim.lsp.buf.code_action, "[C]ode [A]ction")
-
 
           local client = vim.lsp.get_client_by_id(event.data.client_id)
 
@@ -84,74 +108,19 @@ return {
         },
       })
 
-      local capabilities = require("cmp_nvim_lsp").default_capabilities()
+      -- Add capabilities from cmp_nvim_lsp to all servers
+      vim.lsp.config("*", {
+        capabilities = require("cmp_nvim_lsp").default_capabilities(),
+      })
 
-      -- Server configurations
-      local servers = {
-        lua_ls = {
-          settings = {
-            Lua = {
-              completion = { callSnippet = "Replace" },
-              diagnostics = { globals = { "vim" } },
-              runtime = { version = "LuaJIT" },
-            },
-          },
-        },
-        pyright = {},
-        eslint = {
-        },
-        gopls = {},
-        ts_ls = {},
-        sqlls = {},
-      }
-
-      -- Mason setup for ensuring servers are installed
-      require("mason").setup()
-      local mason_lspconfig = require("mason-lspconfig")
-
-      -- This single block replaces the previous setup and setup_handlers calls
-      mason_lspconfig.setup({
-        -- A list of servers to install
-        ensure_installed = vim.tbl_keys(servers),
-
-        -- This is the key part: handlers are defined inside the setup call
-        handlers = {
-          -- This is the default handler that will apply to all servers
-          -- without a specific handler below.
-          function(server_name)
-            local server_opts = servers[server_name] or {}
-            server_opts.capabilities = capabilities
-            require("lspconfig")[server_name].setup(server_opts)
-          end,
-
-          -- Here is a custom handler specifically for the eslint server
-          ["eslint"] = function()
-            require("lspconfig").eslint.setup({
-              capabilities = capabilities,
-              filetypes = { "javascript", "javascriptreact", "typescript", "typescriptreact" },
-            })
-          end,
-          ["gopls"] = function()
-            require("lspconfig").gopls.setup({
-              filetypes = { "go", "gomod", "gowork", "gotmpl" },
-              settings = {
-                gopls = {
-                  completeUnimported = true,
-                  usePlaceholders = true,
-                  analyses = {
-                    unusedparams = true
-                  }
-                }
-              }
-            })
-          end,
-          ["sqlls"] = function()
-            require("lspconfig").sqlls.setup({
-              capabilities = capabilities,
-              filetypes = { "sql", "mysql", "pgsql" },
-            })
-          end,
-        },
+      -- Enable LSP servers (configs are in nvim/lsp/*.lua)
+      vim.lsp.enable({
+        "lua_ls",
+        "pyright",
+        "eslint",
+        "gopls",
+        "ts_ls",
+        "sqls",
       })
     end,
   },
@@ -197,8 +166,15 @@ return {
         end
       end
       mason_tool_installer.setup({ ensure_installed = vim.tbl_keys(formatters) })
-    end
+    end,
   },
+
+  -- Mason Tool Installer for formatters
+  {
+    "WhoIsSethDaniel/mason-tool-installer.nvim",
+    dependencies = { "mason-org/mason.nvim" },
+  },
+
   -- Completion Engine
   {
     "hrsh7th/nvim-cmp",
@@ -208,10 +184,12 @@ return {
       "hrsh7th/cmp-buffer",
       "hrsh7th/cmp-path",
       "saadparwaiz1/cmp_luasnip",
+      "onsails/lspkind.nvim",
     },
     config = function()
       local cmp = require("cmp")
       local luasnip = require("luasnip")
+      local lspkind = require("lspkind")
 
       cmp.setup({
         snippet = {
@@ -238,11 +216,23 @@ return {
           ["<C-y>"] = cmp.mapping.confirm({ select = true }),
         },
         sources = cmp.config.sources({
-          { name = 'nvim_lsp' },
-          { name = 'luasnip' },
-          { name = 'buffer' },
-          { name = 'path' },
-        })
+          { name = "copilot" },
+          { name = "nvim_lsp" },
+          { name = "luasnip" },
+          { name = "buffer" },
+          { name = "path" },
+        }),
+        formatting = {
+          fields = { "abbr", "icon", "kind", "menu" },
+          format = lspkind.cmp_format({
+            maxwidth = {
+              menu = 50,
+              abbr = 50,
+            },
+            ellipsis_char = "...",
+            show_labelDetails = true,
+          })
+        }
       })
 
       cmp.setup.filetype({ "sql", "mysql", "plsql" }, {
@@ -252,11 +242,42 @@ return {
           { name = "buffer" },
         },
       })
-    end
+      lspkind.init({
+        symbol_map = {
+          Copilot = "",
+          Text = "󰉿",
+          Method = "󰆧",
+          Function = "󰊕",
+          Constructor = "",
+          Field = "󰜢",
+          Variable = "󰀫",
+          Class = "󰠱",
+          Interface = "",
+          Module = "",
+          Property = "󰜢",
+          Unit = "󰑭",
+          Value = "󰎠",
+          Enum = "",
+          Keyword = "󰌋",
+          Snippet = "",
+          Color = "󰏘",
+          File = "󰈙",
+          Reference = "󰈇",
+          Folder = "󰉋",
+          EnumMember = "",
+          Constant = "󰏿",
+          Struct = "󰙅",
+          Event = "",
+          Operator = "󰆕",
+          TypeParameter = "",
+        }
+      }
+      )
+    end,
   },
   {
     "L3MON4D3/LuaSnip",
     version = "2.*",
     build = "make install_jsregexp",
-  }
+  },
 }

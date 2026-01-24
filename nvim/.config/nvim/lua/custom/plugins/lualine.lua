@@ -52,6 +52,7 @@ return {
         },
         winbar = {
           lualine_x = { "lsp_status" },
+          lualine_z = { "copilot" },
         },
       })
     end,

@@ -41,11 +41,7 @@ vim.keymap.set("n", "<C-S-l>", "<C-w>L", { desc = "Move window to the right" })
 vim.keymap.set("n", "<C-S-j>", "<C-w>J", { desc = "Move window to the lower" })
 vim.keymap.set("n", "<C-S-k>", "<C-w>K", { desc = "Move window to the upper" })
 
--- Moving or duplicating lines
-vim.keymap.set("n", "<M-j>", ":m .+1<CR>", { desc = "Move line down" })
-vim.keymap.set("v", "<M-j>", ":m .+1<CR>", { desc = "Move selected lines down" })
-vim.keymap.set("n", "<M-k>", ":m .-2<CR>", { desc = "Move line up" })
-vim.keymap.set("v", "<M-k>", ":m .-2<CR>", { desc = "Move selected lines up" })
+-- Duplicating lines
 vim.keymap.set("n", "<M-S-j>", "yyp", { desc = "Duplicate line down" })
 
 -- Remap for copying to system clipboard

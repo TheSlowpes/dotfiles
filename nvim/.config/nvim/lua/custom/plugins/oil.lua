@@ -5,11 +5,13 @@ return {
       win_options = {
         signcolumn = "yes",
       },
+      delete_to_trash = true,
       keymaps = {
         ["<Esc><Esc>"] = { "actions.close", mode = "n" },
-        ["<S-j>"] = { "actions.select", opts = { horizontal = true } },
-        ["<S-l>"] = { "actions.select", opts = { vertical = true } },
-        ["<S-h>"] = { "actions.toggle_hidden" }
+        ["<S-j>"]      = { "actions.select", opts = { horizontal = true } },
+        ["<S-l>"]      = { "actions.select", opts = { vertical = true } },
+        ["<S-h>"]      = { "actions.toggle_hidden" },
+        ["<BS>"]       = { "actions.parent" },
       },
       float = {
         max_width = 0.4,

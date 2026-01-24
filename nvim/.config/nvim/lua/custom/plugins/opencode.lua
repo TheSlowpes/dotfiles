@@ -1,28 +1,49 @@
 return {
   {
     "zbirenbaum/copilot.lua",
+    dependencies = {
+      "copilotlsp-nvim/copilot-lsp",
+      init = function()
+        vim.g.copilot_nes_debounce = 500
+        vim.lsp.enable("copilot_ls")
+      end,
+    },
     cmd = "Copilot",
-    event = "InsertEnter",
+    event = "BufEnter",
     config = function()
-      require("copilot").setup({
-        suggestion = {
+      local ok, copilot = pcall(require, "copilot")
+      if not ok then
+        return
+      end
+      copilot.setup({
+        suggestion = { enabled = false, },
+        panel = { enabled = false, },
+        nes = {
           enabled = true,
-          auto_trigger = true,
-          debounce = 150,
           keymap = {
-            accept = "<S-TAB>",
-            accept_word = "<C-l>",
-            accept_line = "<C-j>",
-            dismiss = "<C-k>",
+            accept_and_goto = "<S-Tab>",
+            accept = "false",
+            dismiss = "<Esc>",
           },
         },
       })
     end,
   },
   {
+    "AndreM222/copilot-lualine",
+  },
+  {
+    "zbirenbaum/copilot-cmp",
+    config = function()
+      require("copilot_cmp").setup()
+    end,
+  },
+  {
     "sudo-tee/opencode.nvim",
     config = function()
-      require("opencode").setup({})
+      require("opencode").setup({
+        default_mode = 'plan',
+      })
     end,
     dependencies = {
       "nvim-lua/plenary.nvim",
