@@ -1,31 +1,16 @@
 return {
   {
     "zbirenbaum/copilot.lua",
-    dependencies = {
-      "copilotlsp-nvim/copilot-lsp",
-      init = function()
-        vim.g.copilot_nes_debounce = 500
-        vim.lsp.enable("copilot_ls")
-      end,
-    },
     cmd = "Copilot",
-    event = "BufEnter",
+    event = "InsertEnter",
     config = function()
       local ok, copilot = pcall(require, "copilot")
       if not ok then
         return
       end
       copilot.setup({
-        suggestion = { enabled = false, },
-        panel = { enabled = false, },
-        nes = {
-          enabled = true,
-          keymap = {
-            accept_and_goto = "<S-Tab>",
-            accept = "false",
-            dismiss = "<Esc>",
-          },
-        },
+        suggestion = { enabled = false },
+        panel = { enabled = false },
       })
     end,
   },
@@ -43,6 +28,10 @@ return {
     config = function()
       require("opencode").setup({
         default_mode = 'plan',
+        ui = {
+          display_context_size = true,
+          display_cost = true,
+        }
       })
     end,
     dependencies = {
@@ -51,7 +40,7 @@ return {
         "MeanderingProgrammer/render-markdown.nvim",
         opts = {
           anti_conceal = { enabled = false },
-          file_types = { "markdown", "opencode-output" },
+          file_types = { "markdown", "opencode_output" },
         },
         ft = { "markdown", "Avante", "copilot-chat", "opencode_output" },
       },

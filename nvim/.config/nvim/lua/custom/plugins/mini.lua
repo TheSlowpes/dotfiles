@@ -21,9 +21,10 @@ return {
       })
       require("mini.diff").setup()
       require("mini.notify").setup()
+
+      vim.keymap.set("n", "<leader>ht", function()
+        require("mini.diff").toggle_overlay(0)
+      end, { desc = "[H]unk [T]oggle" })
     end,
   },
-  vim.keymap.set("n", "<leader>ht", function()
-    require("mini.diff").toggle_overlay(0)
-  end, { desc = "[H]unk [T]oggle" }),
 }

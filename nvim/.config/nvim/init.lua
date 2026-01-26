@@ -90,6 +90,7 @@ require("lazy").setup({
         },
       },
       spec = {
+        { "<leader>b", group = "[B]ookmarks" },
         { "<leader>s", group = "[S]earch" },
         { "<leader>t", group = "[T]oggle" },
         { "<leader>h", group = "Git [H]unk", mode = { "n", "v" } },

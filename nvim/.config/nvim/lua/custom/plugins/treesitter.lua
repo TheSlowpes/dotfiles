@@ -10,6 +10,7 @@ return {
           "typescript",
           "html",
           "css",
+          "go",
           "json",
           "python",
           "yaml",

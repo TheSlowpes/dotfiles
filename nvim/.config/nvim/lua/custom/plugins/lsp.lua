@@ -58,7 +58,7 @@ return {
           map("grd", require("telescope.builtin").lsp_definitions, "[G]oto [D]efinition")
           map("grD", vim.lsp.buf.declaration, "[G]oto [D]eclaration")
           map("gO", require("telescope.builtin").lsp_document_symbols, "Open Document Symbols")
-          map("gW", require("telescope.builtin").lsp_dynamic_workspace_symbols, "Open Worspace Symbols")
+          map("gW", require("telescope.builtin").lsp_dynamic_workspace_symbols, "Open Workspace Symbols")
           map("grt", require("telescope.builtin").lsp_type_definitions, "[G]oto [T]ype Definition")
           map("K", vim.lsp.buf.hover, "Hover Documentation")
           map("<leader>ca", vim.lsp.buf.code_action, "[C]ode [A]ction")
@@ -191,6 +191,15 @@ return {
       local luasnip = require("luasnip")
       local lspkind = require("lspkind")
 
+      -- Initialize lspkind with custom symbols (required for non-standard kinds like Copilot)
+      lspkind.init({
+        symbol_map = {
+          Copilot = "",
+        },
+      })
+
+      vim.api.nvim_set_hl(0, "CmpItemKindCopilot", { fg = "#6CC644" })
+
       cmp.setup({
         snippet = {
           expand = function(args)
@@ -223,16 +232,44 @@ return {
           { name = "path" },
         }),
         formatting = {
-          fields = { "abbr", "icon", "kind", "menu" },
           format = lspkind.cmp_format({
+            mode = "symbol_text",
             maxwidth = {
               menu = 50,
               abbr = 50,
             },
             ellipsis_char = "...",
             show_labelDetails = true,
-          })
-        }
+            symbol_map = {
+              Copilot = "",
+              Text = "󰉿",
+              Method = "󰆧",
+              Function = "󰊕",
+              Constructor = "",
+              Field = "󰜢",
+              Variable = "󰀫",
+              Class = "󰠱",
+              Interface = "",
+              Module = "",
+              Property = "󰜢",
+              Unit = "󰑭",
+              Value = "󰎠",
+              Enum = "",
+              Keyword = "󰌋",
+              Snippet = "",
+              Color = "󰏘",
+              File = "󰈙",
+              Reference = "󰈇",
+              Folder = "󰉋",
+              EnumMember = "",
+              Constant = "󰏿",
+              Struct = "󰙅",
+              Event = "",
+              Operator = "󰆕",
+              TypeParameter = "",
+            },
+          }),
+        },
       })
 
       cmp.setup.filetype({ "sql", "mysql", "plsql" }, {
@@ -242,37 +279,6 @@ return {
           { name = "buffer" },
         },
       })
-      lspkind.init({
-        symbol_map = {
-          Copilot = "",
-          Text = "󰉿",
-          Method = "󰆧",
-          Function = "󰊕",
-          Constructor = "",
-          Field = "󰜢",
-          Variable = "󰀫",
-          Class = "󰠱",
-          Interface = "",
-          Module = "",
-          Property = "󰜢",
-          Unit = "󰑭",
-          Value = "󰎠",
-          Enum = "",
-          Keyword = "󰌋",
-          Snippet = "",
-          Color = "󰏘",
-          File = "󰈙",
-          Reference = "󰈇",
-          Folder = "󰉋",
-          EnumMember = "",
-          Constant = "󰏿",
-          Struct = "󰙅",
-          Event = "",
-          Operator = "󰆕",
-          TypeParameter = "",
-        }
-      }
-      )
     end,
   },
   {

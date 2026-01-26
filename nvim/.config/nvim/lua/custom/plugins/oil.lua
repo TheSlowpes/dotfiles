@@ -21,6 +21,12 @@ return {
         end,
       },
     },
+    config = function(_, opts)
+      require("oil").setup(opts)
+      vim.keymap.set("n", "-", function()
+        require("oil").open_float()
+      end, { desc = "Open Oil in float" })
+    end,
     dependencies = {
       "nvim-tree/nvim-web-devicons",
     },
@@ -36,9 +42,6 @@ return {
     "benomahony/oil-git.nvim",
     dependencies = {
       "stevearc/oil.nvim",
-    }
+    },
   },
-  vim.keymap.set("n", "-", function()
-    require("oil").open_float()
-  end, { desc = "Open Oil in float" }),
 }
