@@ -93,9 +93,10 @@ require("lazy").setup({
         { "<leader>b", group = "[B]ookmarks" },
         { "<leader>s", group = "[S]earch" },
         { "<leader>t", group = "[T]oggle" },
-        { "<leader>h", group = "Git [H]unk", mode = { "n", "v" } },
+        { "<leader>h", group = "Git [H]unk",    mode = { "n", "v" } },
         { "<leader>o", group = "[O]pencode" },
         { "<leader>O", group = "[O]rgmode" },
+        { "<leader>Q", group = "[Q]uit/Session" }
       },
     },
   },
