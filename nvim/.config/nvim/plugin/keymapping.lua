@@ -8,14 +8,13 @@ vim.keymap.set("n", "<esc>", "<cmd>nohlsearch<CR>")
 vim.keymap.set("n", "<leader>m", function()
   vim.o.mouse = vim.o.mouse == "" and "a" or ""
   vim.notify("Mouse support: " .. (vim.o.mouse == "" and "disabled" or "enabled"))
-end, { desc = "Toggle [M]ouse support" })
+end, {desc = "Toggle [M]ouse support" })
 
 -- Diagnostic
 vim.keymap.set("n", "<leader>q", vim.diagnostic.setloclist, { desc = "Open diagnostic [Q]uickfix list" })
 
-
 -- Exit terminal
-vim.keymap.set("t", "<Esc><Esc>", "<C-\\><C-n>", { desc = "Exit terminal mode" })
+vim.keymap.set("t", "<Esc><Esc>", "<C=\\><C-n>", { desc = "Exit terminal mode" })
 
 -- Insert mode keymaps
 vim.keymap.set("i", "jj", "<Esc>", { desc = "Exit insert mode" })
@@ -33,16 +32,16 @@ vim.keymap.set("n", "<down>", '<cmd>echo "Use j to move!!"<CR>')
 
 vim.keymap.set("n", "<C-h>", "<C-w><C-h>", { desc = "Move focus to the left window" })
 vim.keymap.set("n", "<C-l>", "<C-w><C-l>", { desc = "Move focus to the right window" })
-vim.keymap.set("n", "<C-j>", "<C-w><C-j>", { desc = "Move focus to the lower window" })
 vim.keymap.set("n", "<C-k>", "<C-w><C-k>", { desc = "Move focus to the upper window" })
+vim.keymap.set("n", "<C-j>", "<C-w><C-j>", { desc = "Move focus to the lower window" })
 
 vim.keymap.set("n", "<C-S-h>", "<C-w>H", { desc = "Move window to the left" })
 vim.keymap.set("n", "<C-S-l>", "<C-w>L", { desc = "Move window to the right" })
-vim.keymap.set("n", "<C-S-j>", "<C-w>J", { desc = "Move window to the lower" })
 vim.keymap.set("n", "<C-S-k>", "<C-w>K", { desc = "Move window to the upper" })
+vim.keymap.set("n", "<C-S-j>", "<C-w>J", { desc = "Move window to the lower" })
 
 -- Duplicating lines
-vim.keymap.set("n", "<M-S-j>", "yyp", { desc = "Duplicate line down" })
+vim.keymap.set("n", "<M-S-j>", "yyp", { desc = "Duplciate line down" })
 
 -- Remap for copying to system clipboard
 vim.keymap.set("v", "<leader>y", '"+y', { desc = "Yank to system clipboard" })
