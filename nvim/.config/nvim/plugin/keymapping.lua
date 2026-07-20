@@ -8,13 +8,13 @@ vim.keymap.set("n", "<esc>", "<cmd>nohlsearch<CR>")
 vim.keymap.set("n", "<leader>m", function()
   vim.o.mouse = vim.o.mouse == "" and "a" or ""
   vim.notify("Mouse support: " .. (vim.o.mouse == "" and "disabled" or "enabled"))
-end, {desc = "Toggle [M]ouse support" })
+end, { desc = "Toggle [M]ouse support" })
 
 -- Diagnostic
 vim.keymap.set("n", "<leader>q", vim.diagnostic.setloclist, { desc = "Open diagnostic [Q]uickfix list" })
 
 -- Exit terminal
-vim.keymap.set("t", "<Esc><Esc>", "<C=\\><C-n>", { desc = "Exit terminal mode" })
+vim.keymap.set("t", "<Esc><Esc>", "<C-\\><C-n>", { desc = "Exit terminal mode" })
 
 -- Insert mode keymaps
 vim.keymap.set("i", "jj", "<Esc>", { desc = "Exit insert mode" })
