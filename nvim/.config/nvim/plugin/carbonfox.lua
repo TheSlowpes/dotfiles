@@ -4,4 +4,4 @@ end
 
 vim.pack.add({ gh("EdenEast/nightfox.nvim") })
 
-vim.cmd.colorscheme("carbonfox")
+vim.cmd.colorscheme("nightfox")
