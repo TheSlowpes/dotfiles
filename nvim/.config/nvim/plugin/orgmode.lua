@@ -9,112 +9,124 @@ vim.pack.add({
 	{ src = "https://github.com/chipsenkbeil/org-roam.nvim" },
 })
 
--- Lazy-load all org-related setup only for org buffers
-vim.api.nvim_create_autocmd("FileType", {
-	pattern = "org",
-	once = true,
-	callback = function()
-		-- Core Orgmode
-		require("orgmode").setup({
-			org_agenda_files = org_dir .. "/**/*",
-			org_default_notes_file = org_dir .. "/inbox.org",
+local function ensure_directory(path)
+	vim.fn.mkdir(path, "p")
+	if vim.fn.isdirectory(path) == 0 then
+		error("Failed to create orgmode directory: " .. path)
+	end
+end
 
-			-- Disable orgmode's default keymaps so your own/global mappings don't conflict
-			-- (We keep explicit org-local mappings below.)
-			org_default_keys = false,
+for _, directory in ipairs({ org_dir, org_dir .. "/journal", org_dir .. "/notes", org_dir .. "/roam" }) do
+	ensure_directory(directory)
+end
 
-			-- TODO keywords
-			org_todo_keywords = { "TODO", "IN-PROGRESS", "WAITING", "|", "DONE", "CANCELLED" },
-			org_todo_keyword_faces = {
-				["TODO"] = ":foreground #ff6b6b :weight bold",
-				["IN-PROGRESS"] = ":foreground #feca57 :weight bold",
-				["WAITING"] = ":foreground #ff9f43 :weight bold",
-				["DONE"] = ":foreground #1dd1a1 :weight bold",
-				["CANCELLED"] = ":foreground #576574 :weight bold",
-			},
+-- Orgmode's parser detection currently misidentifies a missing parser on Neovim 0.12.
+local parser_ok = pcall(vim.treesitter.language.inspect, "org")
+if not parser_ok then
+	local installer = require("orgmode.utils.treesitter.install")
+	ensure_directory(vim.fs.dirname(installer.get_parser_path()))
+	installer.reinstall()
+end
 
-			-- Capture templates
-			org_capture_templates = {
-				t = {
-					description = "Task",
-					template = "* TODO %?\n  %u",
-					target = org_dir .. "/inbox.org",
-				},
-				n = {
-					description = "Note",
-					template = "* %?\n  %u",
-					target = org_dir .. "/inbox.org",
-				},
-				j = {
-					description = "Journal",
-					template = "* %<%Y-%m-%d %H:%M> %?\n",
-					target = org_dir .. "/journal/%<%Y-%m-%d>.org",
-				},
-				m = {
-					description = "Meeting",
-					template = "* MEETING %?\n  SCHEDULED: %T\n  - Attendees: \n  - Agenda:\n  - Notes:\n  - Action Items:",
-					target = org_dir .. "/inbox.org",
-				},
-				c = {
-					description = "Code Snippet",
-					template = "* %?\n  %u\n  #+BEGIN_SRC\n\n  #+END_SRC",
-					target = org_dir .. "/notes/code.org",
-				},
-				i = {
-					description = "Idea",
-					template = "* IDEA %?\n  %u\n  - Context:\n  - Why interesting:",
-					target = org_dir .. "/inbox.org",
-				},
-			},
+-- Core Orgmode
+require("orgmode").setup({
+	org_agenda_files = org_dir .. "/**/*",
+	org_default_notes_file = org_dir .. "/inbox.org",
 
-			-- Archive location
-			org_archive_location = org_dir .. "/archive.org::* From %s",
+	-- Disable orgmode's default keymaps so your own/global mappings don't conflict
+	-- (We keep explicit org-local mappings below.)
+	org_default_keys = false,
 
-			-- Agenda settings
-			org_agenda_span = "week",
-			org_agenda_start_on_weekday = 1, -- Monday
-			org_deadline_warning_days = 7,
+	-- TODO keywords
+	org_todo_keywords = { "TODO", "IN-PROGRESS", "WAITING", "|", "DONE", "CANCELLED" },
+	org_todo_keyword_faces = {
+		["TODO"] = ":foreground #ff6b6b :weight bold",
+		["IN-PROGRESS"] = ":foreground #feca57 :weight bold",
+		["WAITING"] = ":foreground #ff9f43 :weight bold",
+		["DONE"] = ":foreground #1dd1a1 :weight bold",
+		["CANCELLED"] = ":foreground #576574 :weight bold",
+	},
 
-			-- Enable org indent mode
-			org_indent_mode = "indent",
-			org_startup_indented = true,
+	-- Capture templates
+	org_capture_templates = {
+		t = {
+			description = "Task",
+			template = "* TODO %?\n  %u",
+			target = org_dir .. "/inbox.org",
+		},
+		n = {
+			description = "Note",
+			template = "* %?\n  %u",
+			target = org_dir .. "/inbox.org",
+		},
+		j = {
+			description = "Journal",
+			template = "* %<%Y-%m-%d %H:%M> %?\n",
+			target = org_dir .. "/journal/%<%Y-%m-%d>.org",
+		},
+		m = {
+			description = "Meeting",
+			template = "* MEETING %?\n  SCHEDULED: %T\n  - Attendees: \n  - Agenda:\n  - Notes:\n  - Action Items:",
+			target = org_dir .. "/inbox.org",
+		},
+		c = {
+			description = "Code Snippet",
+			template = "* %?\n  %u\n  #+BEGIN_SRC\n\n  #+END_SRC",
+			target = org_dir .. "/notes/code.org",
+		},
+		i = {
+			description = "Idea",
+			template = "* IDEA %?\n  %u\n  - Context:\n  - Why interesting:",
+			target = org_dir .. "/inbox.org",
+		},
+	},
 
-			-- Org-file-local mappings only (no global defaults)
-			mappings = {
-				org = {
-					org_toggle_checkbox = "<C-Space>",
-					org_cycle = "<TAB>",
-					org_global_cycle = "<S-TAB>",
-					org_todo = "<S-CR>",
-					org_open_at_point = "<CR>",
-					org_insert_heading_respect_content = "<C-CR>",
-				},
-			},
-		})
+	-- Archive location
+	org_archive_location = org_dir .. "/archive.org::* From %s",
 
-		-- Org Bullets for pretty rendering
-		require("org-bullets").setup({
-			concealcursor = true,
-			symbols = {
-				checkboxes = {
-					half = { "", "@org.checkbox.halfchecked" },
-					done = { "✓", "@org.keyword.done" },
-					todo = { " ", "@org.keyword.todo" },
-				},
-				headlines = { "◉", "○", "◆", "◇", "●" },
-			},
-		})
+	-- Agenda settings
+	org_agenda_span = "week",
+	org_agenda_start_on_weekday = 1, -- Monday
+	org_deadline_warning_days = 7,
 
-		-- Org Roam for Zettelkasten-style notes
-		require("org-roam").setup({
-			directory = org_dir .. "/roam",
-			extensions = {
-				dailies = {
-					directory = org_dir .. "/journal",
-				},
-			},
-		})
-	end,
+	-- Enable org indent mode
+	org_indent_mode = "indent",
+	org_startup_indented = true,
+
+	-- Org-file-local mappings only (no global defaults)
+	mappings = {
+		org = {
+			org_toggle_checkbox = "<C-Space>",
+			org_cycle = "<TAB>",
+			org_global_cycle = "<S-TAB>",
+			org_todo = "<S-CR>",
+			org_open_at_point = "<CR>",
+			org_insert_heading_respect_content = "<C-CR>",
+		},
+	},
+})
+
+-- Org Bullets for pretty rendering
+require("org-bullets").setup({
+	concealcursor = true,
+	symbols = {
+		checkboxes = {
+			half = { "", "@org.checkbox.halfchecked" },
+			done = { "✓", "@org.keyword.done" },
+			todo = { " ", "@org.keyword.todo" },
+		},
+		headlines = { "◉", "○", "◆", "◇", "●" },
+	},
+})
+
+-- Org Roam for Zettelkasten-style notes
+require("org-roam").setup({
+	directory = org_dir .. "/roam",
+	extensions = {
+		dailies = {
+			directory = "../journal",
+		},
+	},
 })
 
 -- Global keymaps (outside org file mappings)
