@@ -75,5 +75,7 @@ local ensure_installed = {
 require("mason-tool-installer").setup({ ensure_installed = ensure_installed })
 
 for _, server in ipairs(ensure_installed) do
+	local config_path = vim.fn.stdpath("config") .. "/lsp/" .. server .. ".lua"
+	vim.lsp.config(server, dofile(config_path))
 	vim.lsp.enable(server)
 end
