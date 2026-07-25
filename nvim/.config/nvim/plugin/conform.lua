@@ -1,17 +1,17 @@
 local function gh(repo) return 'https://github.com/' .. repo end
 
 -- [[Formatting]]
-vim.pack.add { 
+vim.pack.add {
   gh 'stevearc/conform.nvim',
   gh 'mason-org/mason.nvim',
   gh 'WhoIsSethDaniel/mason-tool-installer.nvim',
 }
 local formatters_by_ft = {
-  lua = {"stylua"},
-  python = {"black"},
-  javascript = {"prettier"},
-  typescript = {"prettier"},
-  go = {"gofmt", "goimports"},
+  lua = { "stylua" },
+  python = { "black" },
+  javascript = { "prettierd", "prettier", stop_after_first = true },
+  typescript = { "prettierd", " prettier", stop_after_first = true },
+  go = { "gofmt", "goimports" },
 }
 require('mason').setup()
 local mason_tool_installer = require("mason-tool-installer")
@@ -23,7 +23,7 @@ for _, ft_formatters in pairs(formatters_by_ft) do
   end
 end
 
-mason_tool_installer.setup({ ensure_installed = vim.tbl_keys(formatters)})
+mason_tool_installer.setup({ ensure_installed = vim.tbl_keys(formatters) })
 
 require('conform').setup({
   notify_on_error = false,
@@ -47,4 +47,5 @@ require('conform').setup({
   formatters_by_ft = formatters_by_ft,
 })
 
-vim.keymap.set({ 'n', 'v' }, '<leader>f', function() require('conform').format {async = true } end, { desc = '[F]ormat buffer' })
+vim.keymap.set({ 'n', 'v' }, '<leader>f', function() require('conform').format { async = true } end,
+  { desc = '[F]ormat buffer' })
