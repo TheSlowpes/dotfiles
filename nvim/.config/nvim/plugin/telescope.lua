@@ -16,8 +16,9 @@ end
 vim.pack.add(telescope_plugins)
 
 require("telescope").setup({
+	defaults = require("telescope.themes").get_ivy(),
 	extensions = {
-		["ui-select"] = { require("telescope.themes").get_dropdown() },
+		["ui-select"] = { require("telescope.themes").get_ivy() },
 	},
 })
 
