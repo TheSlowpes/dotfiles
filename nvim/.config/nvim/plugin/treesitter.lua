@@ -21,6 +21,7 @@ local parsers = {
 	"vimdoc",
 	"javascript",
 	"typescript",
+	"vue",
 	"go",
 	"json",
 	"python",

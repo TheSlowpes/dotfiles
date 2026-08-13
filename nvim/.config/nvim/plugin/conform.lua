@@ -10,7 +10,8 @@ local formatters_by_ft = {
   lua = { "stylua" },
   python = { "black" },
   javascript = { "prettierd", "prettier", stop_after_first = true },
-  typescript = { "prettierd", " prettier", stop_after_first = true },
+  typescript = { "prettierd", "prettier", stop_after_first = true },
+  vue = { "prettierd", "prettier", stop_after_first = true },
   go = { "gofmt", "goimports" },
 }
 require('mason').setup()
@@ -33,6 +34,7 @@ require('conform').setup({
       python = true,
       javascript = true,
       typescript = true,
+      vue = true,
       go = true,
     }
     if enabled_filetypes[vim.bo[bufnr].filetype] then

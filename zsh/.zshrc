@@ -47,7 +47,12 @@ setopt INTERACTIVE_COMMENTS
 unsetopt BEEP
 
 export EDITOR="nvim"
-export PATH="$HOME/.local/bin:$PATH"
+export PATH="$HOME/.local/bin:$HOME/.opencode/bin:$PATH"
+export MISE_DATA_DIR="$HOME/.local/share/mise"
 export SUDO_EDITOR="$EDITOR"
 export BAT_THEME=ansi
 export MANROFFOPT="-c"
+
+if [[ -x "$HOME/.local/bin/mise" ]]; then
+  eval "$("$HOME/.local/bin/mise" activate zsh)"
+fi

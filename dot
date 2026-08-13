@@ -1,0 +1,1327 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+readonly SCRIPT_NAME="dot"
+DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly DOTFILES_DIR
+
+# name|supported operating systems|description
+readonly COMPONENTS=(
+  "zsh|linux,macos|Zsh configuration"
+  "nvim|linux,macos|Neovim configuration"
+  "tmux|linux,macos|Tmux configuration"
+  "ghostty|linux,macos|Ghostty terminal configuration"
+  "hyprland|linux|Hyprland desktop configuration"
+  "opencode|linux,macos|OpenCode configuration and skills"
+)
+
+# name|comma-separated components
+readonly PROFILES=(
+  "minimal|zsh,nvim"
+  "cli|zsh,nvim,tmux"
+  "terminal|zsh,tmux,ghostty"
+  "desktop|ghostty,hyprland"
+)
+
+# name|description
+readonly REQUIREMENT_GROUPS=(
+  "core|GNU Stow and ripgrep"
+  "nvim-build|Tools required to build Neovim from source"
+)
+
+# name|supported operating systems|description
+readonly TOOLS=(
+  "zsh|linux,macos|Zsh and login shell setup"
+  "tmux|linux,macos|Tmux and the Tmux Plugin Manager"
+  "github|linux,macos|GitHub CLI, SSH key, and authentication"
+  "opencode|linux,macos|OpenCode terminal coding agent"
+  "nvim|linux,macos|Neovim built from the stable source branch"
+)
+
+# name|comma-separated development tools|description
+readonly DEV_PROFILES=(
+  "runtimes|mise,node,go,pnpm|Go, Node.js, and pnpm runtimes"
+  "wails|wails|Wails v2 CLI and desktop build dependencies"
+  "cli|task,lazygit,gograph,crit,hunk,sideshow|Daily development command-line tools"
+  "opencode|crit-opencode|OpenCode integrations"
+)
+
+readonly NODE_VERSION="24"
+readonly GO_VERSION="1.26"
+readonly PNPM_VERSION="11.21.0"
+readonly TASK_VERSION="v3.52.0"
+readonly LAZYGIT_VERSION="v0.64.1"
+readonly WAILS_VERSION="v2.14.0"
+readonly GOGRAPH_VERSION="v1.5.7"
+readonly CRIT_VERSION="v0.18.4"
+readonly HUNK_VERSION="0.18.1"
+readonly SIDESHOW_VERSION="0.13.0"
+
+OS=""
+PACKAGE_MANAGER=""
+APT_UPDATED="false"
+SELECTED=()
+DEV_INSTALLED=()
+
+usage() {
+  cat <<EOF
+Usage:
+  ${SCRIPT_NAME} list [--all]
+  ${SCRIPT_NAME} install <component...>
+  ${SCRIPT_NAME} install --profile <profile>
+  ${SCRIPT_NAME} install --all
+  ${SCRIPT_NAME} uninstall <component...>
+  ${SCRIPT_NAME} uninstall --profile <profile>
+  ${SCRIPT_NAME} uninstall --all
+  ${SCRIPT_NAME} requirements list [group...]
+  ${SCRIPT_NAME} requirements install [group...] [--dry-run]
+  ${SCRIPT_NAME} tools list
+  ${SCRIPT_NAME} tools install <tool...> [--email <email>] [--dry-run]
+  ${SCRIPT_NAME} dev list
+  ${SCRIPT_NAME} dev install <profile...> [--dry-run]
+  ${SCRIPT_NAME} dev install --all [--dry-run]
+  ${SCRIPT_NAME} project list
+  ${SCRIPT_NAME} project enable gograph [--dry-run]
+  ${SCRIPT_NAME} bootstrap dev [--email <email>] [--dry-run]
+
+Commands:
+  list        List components and profiles available on this OS
+  install     Link configurations into your home directory
+  uninstall   Remove links created by this repository
+  requirements
+              List or install system requirements
+  tools       List or install configured command-line tools
+  dev         Install language runtimes and development tools
+  project     Enable integrations in the current project
+  bootstrap   Prepare a fresh machine for development
+
+Run '${SCRIPT_NAME} list --all' to include unsupported components.
+EOF
+}
+
+error() {
+  printf 'Error: %s\n' "$*" >&2
+}
+
+detect_os() {
+  if [[ -n "${DOT_OS:-}" ]]; then
+    OS="$DOT_OS"
+    return 0
+  fi
+  case "$(uname -s)" in
+    Linux) OS="linux" ;;
+    Darwin) OS="macos" ;;
+    *)
+      error "unsupported operating system: $(uname -s)"
+      return 1
+      ;;
+  esac
+}
+
+detect_package_manager() {
+  local manager
+  local managers
+
+  if [[ -n "${DOT_PACKAGE_MANAGER:-}" ]]; then
+    case "$DOT_PACKAGE_MANAGER" in
+      brew|pacman|apt-get|dnf|zypper|apk) PACKAGE_MANAGER="$DOT_PACKAGE_MANAGER"; return 0 ;;
+      *) error "unsupported package manager override: $DOT_PACKAGE_MANAGER"; return 1 ;;
+    esac
+  fi
+
+  if [[ "$OS" == "macos" ]] && ! command -v brew >/dev/null 2>&1; then
+    printf 'Command: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"\n'
+    if [[ "$DRY_RUN" == "false" ]]; then
+      /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+      if [[ -x /opt/homebrew/bin/brew ]]; then
+        eval "$(/opt/homebrew/bin/brew shellenv)"
+      elif [[ -x /usr/local/bin/brew ]]; then
+        eval "$(/usr/local/bin/brew shellenv)"
+      fi
+    else
+      PACKAGE_MANAGER="brew"
+      return 0
+    fi
+  fi
+
+  if [[ "$OS" == "macos" ]]; then
+    managers="brew"
+  else
+    managers="pacman apt-get dnf zypper apk brew"
+  fi
+
+  for manager in $managers; do
+    if command -v "$manager" >/dev/null 2>&1; then
+      PACKAGE_MANAGER="$manager"
+      return 0
+    fi
+  done
+
+  error "no supported package manager found"
+  error "supported managers: brew, pacman, apt-get, dnf, zypper, apk"
+  return 1
+}
+
+requirement_group_record() {
+  local wanted="$1"
+  local record name
+
+  for record in "${REQUIREMENT_GROUPS[@]}"; do
+    IFS='|' read -r name _ <<< "$record"
+    if [[ "$name" == "$wanted" ]]; then
+      printf '%s\n' "$record"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+requirement_packages() {
+  local manager="$1"
+  local group="$2"
+
+  case "${manager}:${group}" in
+    brew:core) printf '%s\n' "stow ripgrep" ;;
+    brew:nvim-build) printf '%s\n' "ninja cmake gettext curl git" ;;
+    pacman:core) printf '%s\n' "stow ripgrep" ;;
+    pacman:nvim-build) printf '%s\n' "base-devel cmake ninja curl git" ;;
+    apt-get:core) printf '%s\n' "stow ripgrep" ;;
+    apt-get:nvim-build) printf '%s\n' "ninja-build gettext cmake curl build-essential git" ;;
+    dnf:core) printf '%s\n' "stow ripgrep" ;;
+    dnf:nvim-build) printf '%s\n' "ninja-build cmake gcc make gettext curl glibc-gconv-extra git" ;;
+    zypper:core) printf '%s\n' "stow ripgrep" ;;
+    zypper:nvim-build) printf '%s\n' "ninja cmake gcc-c++ gettext-tools curl git" ;;
+    apk:core) printf '%s\n' "stow ripgrep" ;;
+    apk:nvim-build) printf '%s\n' "build-base cmake coreutils curl gettext-tiny-dev git" ;;
+    *)
+      error "requirement group '$group' is not defined for $manager"
+      return 1
+      ;;
+  esac
+}
+
+wails_packages() {
+  case "$PACKAGE_MANAGER" in
+    brew) printf '\n' ;;
+    pacman) printf '%s\n' "base-devel pkgconf gtk3 webkit2gtk-4.1" ;;
+    apt-get) printf '%s\n' "build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev" ;;
+    dnf) printf '%s\n' "gcc-c++ pkgconf-pkg-config gtk3-devel webkit2gtk4.1-devel" ;;
+    zypper) printf '%s\n' "gcc-c++ pkg-config gtk3-devel libwebkit2gtk-4_1-devel" ;;
+    apk) printf '%s\n' "build-base pkgconf gtk+3.0-dev webkit2gtk-4.1-dev" ;;
+  esac
+}
+
+tool_package() {
+  local manager="$1"
+  local tool="$2"
+
+  case "${manager}:${tool}" in
+    brew:github-cli) printf '%s\n' "gh" ;;
+    pacman:github-cli|apk:github-cli) printf '%s\n' "github-cli" ;;
+    apt-get:github-cli|dnf:github-cli|zypper:github-cli) printf '%s\n' "gh" ;;
+    brew:openssh) printf '%s\n' "openssh" ;;
+    pacman:openssh|zypper:openssh) printf '%s\n' "openssh" ;;
+    apt-get:openssh) printf '%s\n' "openssh-client" ;;
+    dnf:openssh) printf '%s\n' "openssh-clients" ;;
+    apk:openssh) printf '%s\n' "openssh-client" ;;
+    *)
+      error "tool package '$tool' is not defined for $manager"
+      return 1
+      ;;
+  esac
+}
+
+component_record() {
+  local wanted="$1"
+  local record name
+
+  for record in "${COMPONENTS[@]}"; do
+    IFS='|' read -r name _ _ <<< "$record"
+    if [[ "$name" == "$wanted" ]]; then
+      printf '%s\n' "$record"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+profile_components() {
+  local wanted="$1"
+  local record name components
+
+  for record in "${PROFILES[@]}"; do
+    IFS='|' read -r name components <<< "$record"
+    if [[ "$name" == "$wanted" ]]; then
+      printf '%s\n' "$components"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+profile_supported() {
+  local components component record supported
+  local profile_items
+
+  components="$(profile_components "$1")"
+  IFS=',' read -r -a profile_items <<< "$components"
+  for component in "${profile_items[@]}"; do
+    record="$(component_record "$component")"
+    IFS='|' read -r _ supported _ <<< "$record"
+    supports_os "$supported" || return 1
+  done
+}
+
+supports_os() {
+  local supported=",$1,"
+  [[ "$supported" == *",${OS},"* ]]
+}
+
+is_selected() {
+  local wanted="$1"
+  local selected
+
+  for selected in "${SELECTED[@]}"; do
+    [[ "$selected" == "$wanted" ]] && return 0
+  done
+
+  return 1
+}
+
+add_component() {
+  local name="$1"
+  local enforce_os="$2"
+  local record supported
+
+  if ! record="$(component_record "$name")"; then
+    error "unknown component '$name'; run '${SCRIPT_NAME} list' to see valid options"
+    return 1
+  fi
+
+  IFS='|' read -r _ supported _ <<< "$record"
+  if [[ "$enforce_os" == "true" ]] && ! supports_os "$supported"; then
+    error "component '$name' is not supported on ${OS}"
+    return 1
+  fi
+
+  if ! is_selected "$name"; then
+    SELECTED+=("$name")
+  fi
+}
+
+add_profile() {
+  local profile="$1"
+  local enforce_os="$2"
+  local components component
+  local profile_items
+
+  if ! components="$(profile_components "$profile")"; then
+    error "unknown profile '$profile'; run '${SCRIPT_NAME} list' to see valid options"
+    return 1
+  fi
+
+  IFS=',' read -r -a profile_items <<< "$components"
+  for component in "${profile_items[@]}"; do
+    add_component "$component" "$enforce_os"
+  done
+}
+
+add_all() {
+  local enforce_os="$1"
+  local record name supported
+
+  for record in "${COMPONENTS[@]}"; do
+    IFS='|' read -r name supported _ <<< "$record"
+    if [[ "$enforce_os" == "false" ]] || supports_os "$supported"; then
+      add_component "$name" "$enforce_os"
+    fi
+  done
+}
+
+select_components() {
+  local enforce_os="$1"
+  shift
+
+  SELECTED=()
+  if [[ $# -eq 0 ]]; then
+    error "no components selected; run '${SCRIPT_NAME} list' to see valid options"
+    return 1
+  fi
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --all)
+        add_all "$enforce_os"
+        ;;
+      --profile)
+        if [[ $# -lt 2 ]]; then
+          error "--profile requires a profile name"
+          return 1
+        fi
+        add_profile "$2" "$enforce_os"
+        shift
+        ;;
+      -* )
+        error "unknown option '$1'"
+        return 1
+        ;;
+      *)
+        add_component "$1" "$enforce_os"
+        ;;
+    esac
+    shift
+  done
+}
+
+cmd_list() {
+  local show_all="false"
+  local record name supported description status
+
+  if [[ $# -gt 1 ]] || { [[ $# -eq 1 ]] && [[ "$1" != "--all" ]]; }; then
+    error "usage: ${SCRIPT_NAME} list [--all]"
+    return 1
+  fi
+  [[ $# -eq 1 ]] && show_all="true"
+
+  printf '%-12s %-15s %s\n' "COMPONENT" "SUPPORTED" "DESCRIPTION"
+  for record in "${COMPONENTS[@]}"; do
+    IFS='|' read -r name supported description <<< "$record"
+    if supports_os "$supported"; then
+      status="yes"
+    else
+      status="no (${supported})"
+    fi
+
+    if [[ "$show_all" == "true" ]] || [[ "$status" == "yes" ]]; then
+      printf '%-12s %-15s %s\n' "$name" "$status" "$description"
+    fi
+  done
+
+  printf '\n%-12s %-15s %s\n' "PROFILE" "SUPPORTED" "COMPONENTS"
+  for record in "${PROFILES[@]}"; do
+    IFS='|' read -r name supported <<< "$record"
+    if profile_supported "$name"; then
+      status="yes"
+    else
+      status="no"
+    fi
+
+    if [[ "$show_all" == "true" ]] || [[ "$status" == "yes" ]]; then
+      printf '%-12s %-15s %s\n' "$name" "$status" "${supported//,/ }"
+    fi
+  done
+}
+
+select_requirement_groups() {
+  local group
+
+  SELECTED=()
+  if [[ $# -eq 0 ]]; then
+    for group in "${REQUIREMENT_GROUPS[@]}"; do
+      IFS='|' read -r group _ <<< "$group"
+      SELECTED+=("$group")
+    done
+    return 0
+  fi
+
+  for group in "$@"; do
+    if ! requirement_group_record "$group" >/dev/null; then
+      error "unknown requirement group '$group'"
+      return 1
+    fi
+    if ! is_selected "$group"; then
+      SELECTED+=("$group")
+    fi
+  done
+}
+
+collect_requirement_packages() {
+  local group packages package
+
+  REQUIREMENT_PACKAGES=()
+  for group in "${SELECTED[@]}"; do
+    packages="$(requirement_packages "$PACKAGE_MANAGER" "$group")"
+    for package in $packages; do
+      if ! requirement_package_selected "$package"; then
+        REQUIREMENT_PACKAGES+=("$package")
+      fi
+    done
+  done
+}
+
+requirement_package_selected() {
+  local wanted="$1"
+  local package
+
+  for package in "${REQUIREMENT_PACKAGES[@]}"; do
+    [[ "$package" == "$wanted" ]] && return 0
+  done
+  return 1
+}
+
+print_command() {
+  printf 'Command:'
+  printf ' %q' "$@"
+  printf '\n'
+}
+
+run_command() {
+  print_command "$@"
+  if [[ "$DRY_RUN" == "false" ]]; then
+    "$@"
+  fi
+}
+
+install_requirement_packages() {
+  install_packages "${REQUIREMENT_PACKAGES[@]}"
+}
+
+install_packages() {
+  local command=()
+  local packages=("$@")
+
+  case "$PACKAGE_MANAGER" in
+    brew) command=(brew install) ;;
+    pacman) command=(pacman -S --needed) ;;
+    apt-get) command=(apt-get install -y) ;;
+    dnf) command=(dnf install -y) ;;
+    zypper) command=(zypper install -y) ;;
+    apk) command=(apk add) ;;
+  esac
+
+  if [[ "$PACKAGE_MANAGER" == "apt-get" ]] && [[ "$APT_UPDATED" == "false" ]]; then
+    local update_command=(apt-get update)
+    if [[ "$(id -u)" -ne 0 ]]; then
+      command -v sudo >/dev/null 2>&1 || { error "sudo is required to update apt metadata"; return 1; }
+      update_command=(sudo "${update_command[@]}")
+    fi
+    run_command "${update_command[@]}"
+    APT_UPDATED="true"
+  fi
+
+  if [[ "$PACKAGE_MANAGER" != "brew" ]] && [[ "$(id -u)" -ne 0 ]]; then
+    if ! command -v sudo >/dev/null 2>&1; then
+      error "sudo is required to install packages with $PACKAGE_MANAGER"
+      return 1
+    fi
+    command=(sudo "${command[@]}")
+  fi
+
+  command+=("${packages[@]}")
+  print_command "${command[@]}"
+  if [[ "$DRY_RUN" == "false" ]]; then
+    "${command[@]}"
+  fi
+}
+
+cmd_requirements() {
+  local action="${1:-}"
+  local group record description packages
+  DRY_RUN="false"
+  REQUIREMENT_PACKAGES=()
+
+  if [[ -z "$action" ]] || [[ "$action" == "-h" ]] || [[ "$action" == "--help" ]]; then
+    cat <<EOF
+Usage:
+  ${SCRIPT_NAME} requirements list [group...]
+  ${SCRIPT_NAME} requirements install [group...] [--dry-run]
+
+Groups:
+  core          GNU Stow and ripgrep
+  nvim-build    Neovim source build prerequisites
+
+With no groups, all requirement groups are selected.
+EOF
+    return 0
+  fi
+  shift
+
+  if [[ "$action" == "install" ]]; then
+    local args=()
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --dry-run) DRY_RUN="true" ;;
+        -*)
+          error "unknown requirements option '$1'"
+          return 1
+          ;;
+        *) args+=("$1") ;;
+      esac
+      shift
+    done
+    select_requirement_groups "${args[@]}"
+  elif [[ "$action" == "list" ]]; then
+    select_requirement_groups "$@"
+  else
+    error "unknown requirements command '$action'"
+    return 1
+  fi
+
+  detect_package_manager
+
+  printf 'Package manager: %s\n\n' "$PACKAGE_MANAGER"
+  for group in "${SELECTED[@]}"; do
+    record="$(requirement_group_record "$group")"
+    IFS='|' read -r _ description <<< "$record"
+    packages="$(requirement_packages "$PACKAGE_MANAGER" "$group")"
+    printf '%-12s %s\n' "$group" "$description"
+    printf '  %s\n' "$packages"
+  done
+
+  if [[ "$action" == "install" ]]; then
+    collect_requirement_packages
+    printf '\n'
+    install_requirement_packages
+  fi
+}
+
+tool_record() {
+  local wanted="$1"
+  local record name
+
+  for record in "${TOOLS[@]}"; do
+    IFS='|' read -r name _ _ <<< "$record"
+    if [[ "$name" == "$wanted" ]]; then
+      printf '%s\n' "$record"
+      return 0
+    fi
+  done
+  return 1
+}
+
+install_tmux() {
+  local tpm_dir="${HOME}/.tmux/plugins/tpm"
+  local packages=()
+
+  if command -v tmux >/dev/null 2>&1; then
+    printf 'tmux is already installed\n'
+  else
+    packages+=(tmux)
+  fi
+  if ! command -v git >/dev/null 2>&1; then
+    packages+=(git)
+  fi
+  if [[ ${#packages[@]} -gt 0 ]]; then
+    install_packages "${packages[@]}"
+  fi
+
+  if [[ -d "${tpm_dir}/.git" ]]; then
+    printf 'TPM is already installed at %s\n' "$tpm_dir"
+    return 0
+  fi
+  if [[ -e "$tpm_dir" ]]; then
+    error "cannot install TPM: path already exists and is not a Git repository: $tpm_dir"
+    return 1
+  fi
+  if [[ "$DRY_RUN" == "false" ]] && ! command -v git >/dev/null 2>&1; then
+    error "Git is required to clone TPM; install the core requirements first"
+    return 1
+  fi
+
+  print_command git clone --depth 1 https://github.com/tmux-plugins/tpm "$tpm_dir"
+  if [[ "$DRY_RUN" == "false" ]]; then
+    mkdir -p "$(dirname "$tpm_dir")"
+    git clone --depth 1 https://github.com/tmux-plugins/tpm "$tpm_dir"
+  fi
+}
+
+install_zsh() {
+  local zsh_path
+  local current_shell
+  local shell_command=()
+
+  if command -v zsh >/dev/null 2>&1; then
+    printf 'zsh is already installed\n'
+  else
+    install_packages zsh
+  fi
+
+  if command -v zsh >/dev/null 2>&1; then
+    zsh_path="$(command -v zsh)"
+  elif [[ "$PACKAGE_MANAGER" == "brew" ]]; then
+    zsh_path="$(brew --prefix)/bin/zsh"
+  else
+    zsh_path="/usr/bin/zsh"
+  fi
+
+  if [[ -r /etc/shells ]] && grep -Fxq "$zsh_path" /etc/shells; then
+    printf '%s is already listed in /etc/shells\n' "$zsh_path"
+  else
+    if [[ "$(id -u)" -eq 0 ]]; then
+      print_command sh -c "printf '%s\\n' '$zsh_path' >> /etc/shells"
+      if [[ "$DRY_RUN" == "false" ]]; then
+        printf '%s\n' "$zsh_path" >> /etc/shells
+      fi
+    else
+      if ! command -v sudo >/dev/null 2>&1; then
+        error "sudo is required to add $zsh_path to /etc/shells"
+        return 1
+      fi
+      print_command sh -c "printf '%s\\n' '$zsh_path' | sudo tee -a /etc/shells >/dev/null"
+      if [[ "$DRY_RUN" == "false" ]]; then
+        printf '%s\n' "$zsh_path" | sudo tee -a /etc/shells >/dev/null
+      fi
+    fi
+  fi
+
+  current_shell="$(getent passwd "$(id -un)" 2>/dev/null | cut -d: -f7 || true)"
+  [[ -z "$current_shell" ]] && current_shell="${SHELL:-}"
+  if [[ "$current_shell" == "$zsh_path" ]]; then
+    printf 'zsh is already the login shell\n'
+    return 0
+  fi
+
+  if ! command -v chsh >/dev/null 2>&1; then
+    error "chsh is required to set zsh as the login shell"
+    return 1
+  fi
+  shell_command=(chsh -s "$zsh_path")
+  print_command "${shell_command[@]}"
+  if [[ "$DRY_RUN" == "false" ]]; then
+    "${shell_command[@]}"
+    printf 'Log out and back in for the shell change to take effect\n'
+  fi
+}
+
+install_github() {
+  local key_path="${HOME}/.ssh/id_ed25519_github"
+  local ssh_config="${HOME}/.ssh/config"
+  local email="$GITHUB_EMAIL"
+  local generated_key="false"
+  local packages=()
+
+  if command -v gh >/dev/null 2>&1; then
+    printf 'GitHub CLI is already installed\n'
+  else
+    packages+=("$(tool_package "$PACKAGE_MANAGER" github-cli)")
+  fi
+  if ! command -v git >/dev/null 2>&1; then
+    packages+=(git)
+  fi
+  if ! command -v ssh-keygen >/dev/null 2>&1; then
+    packages+=("$(tool_package "$PACKAGE_MANAGER" openssh)")
+  fi
+  if [[ ${#packages[@]} -gt 0 ]]; then
+    install_packages "${packages[@]}"
+  fi
+
+  if [[ -f "$key_path" ]]; then
+    printf 'GitHub SSH key already exists at %s\n' "$key_path"
+  else
+    if [[ -e "$key_path" ]] || [[ -e "${key_path}.pub" ]]; then
+      error "cannot generate GitHub SSH key: incomplete key files exist at $key_path"
+      return 1
+    fi
+    if [[ -z "$email" ]] && command -v git >/dev/null 2>&1; then
+      email="$(git config --global user.email || true)"
+    fi
+    if [[ -z "$email" ]] && [[ "$DRY_RUN" == "false" ]]; then
+      read -r -p "GitHub email: " email
+    fi
+    if [[ -z "$email" ]]; then
+      error "an email is required to generate the GitHub SSH key; pass --email <email>"
+      return 1
+    fi
+
+    print_command ssh-keygen -t ed25519 -C "$email" -f "$key_path" -N ""
+    if [[ "$DRY_RUN" == "false" ]]; then
+      if ! command -v ssh-keygen >/dev/null 2>&1; then
+        error "OpenSSH was installed but ssh-keygen is not available in PATH"
+        return 1
+      fi
+      mkdir -p "${HOME}/.ssh"
+      chmod 700 "${HOME}/.ssh"
+      ssh-keygen -t ed25519 -C "$email" -f "$key_path" -N ""
+    fi
+    generated_key="true"
+  fi
+
+  if [[ -f "$ssh_config" ]] && grep -Fq "IdentityFile $key_path" "$ssh_config"; then
+    printf 'GitHub SSH key is already configured in %s\n' "$ssh_config"
+  else
+    printf 'Configure %s to use %s for github.com\n' "$ssh_config" "$key_path"
+    if [[ "$DRY_RUN" == "false" ]]; then
+      mkdir -p "${HOME}/.ssh"
+      chmod 700 "${HOME}/.ssh"
+      {
+        printf '\nHost github.com\n'
+        printf '  IdentityFile %s\n' "$key_path"
+        printf '  IdentitiesOnly yes\n'
+      } >> "$ssh_config"
+      chmod 600 "$ssh_config"
+    fi
+  fi
+
+  if command -v gh >/dev/null 2>&1 && gh auth status --hostname github.com >/dev/null 2>&1; then
+    printf 'GitHub CLI is already authenticated\n'
+    if [[ "$generated_key" == "true" ]]; then
+      print_command gh ssh-key add "${key_path}.pub" --title "$(hostname)-dotfiles"
+      if [[ "$DRY_RUN" == "false" ]]; then
+        gh ssh-key add "${key_path}.pub" --title "$(hostname)-dotfiles"
+      fi
+    fi
+    return 0
+  fi
+
+  print_command gh auth login --hostname github.com --git-protocol ssh --web
+  if [[ "$DRY_RUN" == "false" ]]; then
+    if ! command -v gh >/dev/null 2>&1; then
+      error "GitHub CLI was installed but is not available in PATH"
+      return 1
+    fi
+    gh auth login --hostname github.com --git-protocol ssh --web
+  fi
+}
+
+install_opencode() {
+  if command -v opencode >/dev/null 2>&1; then
+    printf 'OpenCode is already installed at %s\n' "$(command -v opencode)"
+    return 0
+  fi
+
+  if ! command -v curl >/dev/null 2>&1; then
+    install_packages curl
+  fi
+
+  printf 'Command: curl -fsSL https://opencode.ai/install | bash\n'
+  if [[ "$DRY_RUN" == "false" ]]; then
+    if ! command -v curl >/dev/null 2>&1; then
+      error "curl was installed but is not available in PATH"
+      return 1
+    fi
+    curl -fsSL https://opencode.ai/install | bash
+  fi
+}
+
+install_nvim() {
+  local source_dir="${HOME}/.local/src/neovim"
+  local install_prefix="${HOME}/.local"
+  local packages package
+  local nvim_packages=()
+
+  packages="$(requirement_packages "$PACKAGE_MANAGER" nvim-build)"
+  for package in $packages; do
+    nvim_packages+=("$package")
+  done
+  install_packages "${nvim_packages[@]}"
+
+  if [[ -d "${source_dir}/.git" ]]; then
+    if [[ -n "$(git -C "$source_dir" status --porcelain)" ]]; then
+      error "Neovim source checkout has uncommitted changes: $source_dir"
+      return 1
+    fi
+    print_command git -C "$source_dir" pull --ff-only
+    if [[ "$DRY_RUN" == "false" ]]; then
+      git -C "$source_dir" pull --ff-only
+    fi
+  elif [[ -e "$source_dir" ]]; then
+    error "cannot clone Neovim: path exists and is not a Git repository: $source_dir"
+    return 1
+  else
+    print_command git clone --branch stable --depth 1 https://github.com/neovim/neovim.git "$source_dir"
+    if [[ "$DRY_RUN" == "false" ]]; then
+      mkdir -p "$(dirname "$source_dir")"
+      git clone --branch stable --depth 1 https://github.com/neovim/neovim.git "$source_dir"
+    fi
+  fi
+
+  print_command make -C "$source_dir" CMAKE_BUILD_TYPE=RelWithDebInfo CMAKE_INSTALL_PREFIX="$install_prefix" install
+  if [[ "$DRY_RUN" == "false" ]]; then
+    make -C "$source_dir" CMAKE_BUILD_TYPE=RelWithDebInfo CMAKE_INSTALL_PREFIX="$install_prefix" install
+    "${install_prefix}/bin/nvim" --version
+  fi
+}
+
+dev_profile_record() {
+  local wanted="$1"
+  local record name
+
+  for record in "${DEV_PROFILES[@]}"; do
+    IFS='|' read -r name _ _ <<< "$record"
+    if [[ "$name" == "$wanted" ]]; then
+      printf '%s\n' "$record"
+      return 0
+    fi
+  done
+  return 1
+}
+
+ensure_mise() {
+  if command -v mise >/dev/null 2>&1 || [[ -x "${HOME}/.local/bin/mise" ]]; then
+    printf 'mise is already installed\n'
+    return 0
+  fi
+  if ! command -v curl >/dev/null 2>&1; then
+    install_packages curl
+  fi
+  printf 'Command: curl -fsSL https://mise.run | sh\n'
+  if [[ "$DRY_RUN" == "false" ]]; then
+    curl -fsSL https://mise.run | sh
+  fi
+}
+
+mise_command() {
+  if command -v mise >/dev/null 2>&1; then
+    command -v mise
+  else
+    printf '%s\n' "${HOME}/.local/bin/mise"
+  fi
+}
+
+install_dev_tool() {
+  local tool="$1"
+  local mise_bin
+  local packages package
+  local package_list=()
+
+  if dev_tool_installed "$tool"; then
+    return 0
+  fi
+
+  case "$tool" in
+    mise)
+      ensure_mise
+      ;;
+    node)
+      ensure_mise
+      mise_bin="$(mise_command)"
+      run_command "$mise_bin" use --global "node@${NODE_VERSION}"
+      ;;
+    go)
+      ensure_mise
+      mise_bin="$(mise_command)"
+      run_command "$mise_bin" use --global "go@${GO_VERSION}"
+      ;;
+    pnpm)
+      install_dev_tool node
+      mise_bin="$(mise_command)"
+      run_command "$mise_bin" exec "node@${NODE_VERSION}" -- corepack enable
+      run_command "$mise_bin" exec "node@${NODE_VERSION}" -- corepack install --global "pnpm@${PNPM_VERSION}"
+      run_command "$mise_bin" exec "node@${NODE_VERSION}" -- pnpm config set global-bin-dir "${HOME}/.local/bin"
+      ;;
+    task)
+      install_dev_tool go
+      mise_bin="$(mise_command)"
+      run_command env "GOBIN=${HOME}/.local/bin" "$mise_bin" exec "go@${GO_VERSION}" -- go install "github.com/go-task/task/v3/cmd/task@${TASK_VERSION}"
+      ;;
+    lazygit)
+      install_dev_tool go
+      mise_bin="$(mise_command)"
+      run_command env "GOBIN=${HOME}/.local/bin" "$mise_bin" exec "go@${GO_VERSION}" -- go install "github.com/jesseduffield/lazygit@${LAZYGIT_VERSION}"
+      ;;
+    wails)
+      install_dev_tool go
+      packages="$(wails_packages)"
+      for package in $packages; do
+        package_list+=("$package")
+      done
+      if [[ ${#package_list[@]} -gt 0 ]]; then
+        install_packages "${package_list[@]}"
+      elif [[ "$OS" == "macos" ]]; then
+        printf 'Wails requires the Xcode Command Line Tools on macOS\n'
+      fi
+      mise_bin="$(mise_command)"
+      run_command env "GOBIN=${HOME}/.local/bin" "$mise_bin" exec "go@${GO_VERSION}" -- go install "github.com/wailsapp/wails/v2/cmd/wails@${WAILS_VERSION}"
+      if [[ "$DRY_RUN" == "false" ]]; then
+        "${HOME}/.local/bin/wails" doctor
+      else
+        print_command "${HOME}/.local/bin/wails" doctor
+      fi
+      ;;
+    gograph)
+      install_dev_tool go
+      mise_bin="$(mise_command)"
+      run_command env "GOBIN=${HOME}/.local/bin" "$mise_bin" exec "go@${GO_VERSION}" -- go install "github.com/ozgurcd/gograph/cmd/gograph@${GOGRAPH_VERSION}"
+      ;;
+    crit)
+      install_dev_tool go
+      mise_bin="$(mise_command)"
+      run_command env "GOBIN=${HOME}/.local/bin" "$mise_bin" exec "go@${GO_VERSION}" -- go install "github.com/tomasz-tomczyk/crit/cmd/crit@${CRIT_VERSION}"
+      ;;
+    hunk)
+      ensure_mise
+      mise_bin="$(mise_command)"
+      run_command "$mise_bin" use --global "hunk@${HUNK_VERSION}"
+      ;;
+    sideshow)
+      install_dev_tool pnpm
+      mise_bin="$(mise_command)"
+      run_command "$mise_bin" exec "node@${NODE_VERSION}" -- pnpm add --global "sideshow@${SIDESHOW_VERSION}"
+      ;;
+    crit-opencode)
+      install_dev_tool crit
+      printf 'Crit OpenCode integration is managed by the opencode Stow component\n'
+      ;;
+    *)
+      error "unknown development tool '$tool'"
+      return 1
+      ;;
+  esac
+  DEV_INSTALLED+=("$tool")
+}
+
+dev_tool_installed() {
+  local wanted="$1"
+  local tool
+  for tool in "${DEV_INSTALLED[@]}"; do
+    [[ "$tool" == "$wanted" ]] && return 0
+  done
+  return 1
+}
+
+cmd_dev() {
+  local action="${1:-}"
+  local record profile tools description tool
+  local requested=()
+  local profile_tools
+  DRY_RUN="false"
+  SELECTED=()
+  DEV_INSTALLED=()
+
+  if [[ -z "$action" ]] || [[ "$action" == "-h" ]] || [[ "$action" == "--help" ]]; then
+    cat <<EOF
+Usage:
+  ${SCRIPT_NAME} dev list
+  ${SCRIPT_NAME} dev install <profile...> [--dry-run]
+  ${SCRIPT_NAME} dev install --all [--dry-run]
+
+Profiles:
+  runtimes      mise, Node ${NODE_VERSION}, Go ${GO_VERSION}, pnpm ${PNPM_VERSION}
+  wails         Wails ${WAILS_VERSION} and desktop build dependencies
+  cli           Task, lazygit, gograph, Crit, Hunk, and Sideshow
+  opencode      Crit OpenCode integration
+EOF
+    return 0
+  fi
+  shift
+
+  if [[ "$action" == "list" ]]; then
+    [[ $# -eq 0 ]] || { error "usage: ${SCRIPT_NAME} dev list"; return 1; }
+    printf '%-12s %-38s %s\n' "PROFILE" "TOOLS" "DESCRIPTION"
+    for record in "${DEV_PROFILES[@]}"; do
+      IFS='|' read -r profile tools description <<< "$record"
+      printf '%-12s %-38s %s\n' "$profile" "${tools//,/ }" "$description"
+    done
+    return 0
+  fi
+  [[ "$action" == "install" ]] || { error "unknown dev command '$action'"; return 1; }
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --dry-run) DRY_RUN="true" ;;
+      --all)
+        for record in "${DEV_PROFILES[@]}"; do
+          IFS='|' read -r profile _ _ <<< "$record"
+          requested+=("$profile")
+        done
+        ;;
+      -*) error "unknown dev option '$1'"; return 1 ;;
+      *) requested+=("$1") ;;
+    esac
+    shift
+  done
+  [[ ${#requested[@]} -gt 0 ]] || { error "no dev profiles selected; run '${SCRIPT_NAME} dev list'"; return 1; }
+
+  for profile in "${requested[@]}"; do
+    if ! record="$(dev_profile_record "$profile")"; then
+      error "unknown dev profile '$profile'; run '${SCRIPT_NAME} dev list'"
+      return 1
+    fi
+    IFS='|' read -r _ profile_tools _ <<< "$record"
+    IFS=',' read -r -a tools <<< "$profile_tools"
+    for tool in "${tools[@]}"; do
+      if ! is_selected "$tool"; then
+        SELECTED+=("$tool")
+      fi
+    done
+  done
+
+  detect_package_manager
+  for tool in "${SELECTED[@]}"; do
+    printf '\n==> %s\n' "$tool"
+    install_dev_tool "$tool"
+  done
+}
+
+write_gograph_project_config() {
+  local config_path="$1"
+  cat > "$config_path" <<'EOF'
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "gograph": {
+      "type": "local",
+      "command": ["gograph", "mcp", "."],
+      "enabled": true
+    }
+  }
+}
+EOF
+}
+
+cmd_project() {
+  local action="${1:-}"
+  local integration="${2:-}"
+  local project_dir config_path
+  DRY_RUN="false"
+
+  if [[ -z "$action" ]] || [[ "$action" == "-h" ]] || [[ "$action" == "--help" ]]; then
+    cat <<EOF
+Usage:
+  ${SCRIPT_NAME} project list
+  ${SCRIPT_NAME} project enable gograph [--dry-run]
+EOF
+    return 0
+  fi
+  if [[ "$action" == "list" ]]; then
+    [[ $# -eq 1 ]] || { error "usage: ${SCRIPT_NAME} project list"; return 1; }
+    printf '%-12s %s\n' "INTEGRATION" "DESCRIPTION"
+    printf '%-12s %s\n' "gograph" "Create a project-local OpenCode MCP configuration"
+    return 0
+  fi
+  [[ "$action" == "enable" ]] || { error "unknown project command '$action'"; return 1; }
+  [[ "$integration" == "gograph" ]] || { error "unknown project integration '$integration'"; return 1; }
+  shift 2
+  if [[ $# -gt 1 ]] || { [[ $# -eq 1 ]] && [[ "$1" != "--dry-run" ]]; }; then
+    error "usage: ${SCRIPT_NAME} project enable gograph [--dry-run]"
+    return 1
+  fi
+  [[ $# -eq 1 ]] && DRY_RUN="true"
+
+  project_dir="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+  config_path="${project_dir}/opencode.json"
+  if [[ -e "$config_path" ]]; then
+    error "project config already exists and will not be overwritten: $config_path"
+    return 1
+  fi
+  if [[ "$DRY_RUN" == "false" ]] && ! command -v gograph >/dev/null 2>&1; then
+    error "gograph is required; run '${SCRIPT_NAME} dev install cli' first"
+    return 1
+  fi
+  printf 'Create %s\n' "$config_path"
+  print_command gograph build . --precise
+  if [[ "$DRY_RUN" == "false" ]]; then
+    (cd "$project_dir" && gograph build . --precise)
+    local temp_config="${config_path}.tmp.$$"
+    write_gograph_project_config "$temp_config"
+    mv "$temp_config" "$config_path"
+    printf 'Restart OpenCode to load the gograph MCP server\n'
+  fi
+}
+
+cmd_bootstrap() {
+  local target="${1:-}"
+  local email=""
+  local dry_run="false"
+  local options=()
+
+  if [[ -z "$target" ]] || [[ "$target" == "-h" ]] || [[ "$target" == "--help" ]]; then
+    cat <<EOF
+Usage:
+  ${SCRIPT_NAME} bootstrap dev [--email <email>] [--dry-run]
+
+Installs requirements, configured CLI tools, development profiles, and the
+CLI dotfile profile for a fresh development machine.
+EOF
+    return 0
+  fi
+  [[ "$target" == "dev" ]] || { error "unknown bootstrap target '$target'"; return 1; }
+  shift
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --dry-run) dry_run="true" ;;
+      --email)
+        [[ $# -ge 2 ]] || { error "--email requires an email address"; return 1; }
+        email="$2"
+        shift
+        ;;
+      *) error "unknown bootstrap option '$1'"; return 1 ;;
+    esac
+    shift
+  done
+  [[ "$dry_run" == "true" ]] && options+=(--dry-run)
+
+  printf '\n==> System requirements\n'
+  cmd_requirements install "${options[@]}"
+
+  printf '\n==> Base tools\n'
+  local tool_options=(zsh tmux github opencode nvim)
+  [[ -n "$email" ]] && tool_options+=(--email "$email")
+  tool_options+=("${options[@]}")
+  cmd_tools install "${tool_options[@]}"
+
+  printf '\n==> Development environment\n'
+  cmd_dev install --all "${options[@]}"
+
+  printf '\n==> Dotfiles\n'
+  if [[ "$dry_run" == "true" ]]; then
+    printf 'Command: %q install --profile cli opencode\n' "${DOTFILES_DIR}/dot"
+  else
+    cmd_stow install --profile cli opencode
+  fi
+}
+
+cmd_tools() {
+  local action="${1:-}"
+  local record name supported description status
+  local args=()
+  DRY_RUN="false"
+  GITHUB_EMAIL=""
+
+  if [[ -z "$action" ]] || [[ "$action" == "-h" ]] || [[ "$action" == "--help" ]]; then
+    cat <<EOF
+Usage:
+  ${SCRIPT_NAME} tools list
+  ${SCRIPT_NAME} tools install <tool...> [--email <email>] [--dry-run]
+
+Tools:
+  zsh           Install zsh and set it as the login shell
+  tmux          Install tmux and clone TPM
+  github        Install gh, generate an SSH key, and authenticate
+  opencode      Install OpenCode using its official curl installer
+  nvim          Clone and build Neovim stable into ~/.local
+EOF
+    return 0
+  fi
+  shift
+
+  if [[ "$action" == "list" ]]; then
+    if [[ $# -gt 0 ]]; then
+      error "usage: ${SCRIPT_NAME} tools list"
+      return 1
+    fi
+    printf '%-12s %-15s %s\n' "TOOL" "SUPPORTED" "DESCRIPTION"
+    for record in "${TOOLS[@]}"; do
+      IFS='|' read -r name supported description <<< "$record"
+      supports_os "$supported" || continue
+      printf '%-12s %-15s %s\n' "$name" "yes" "$description"
+    done
+    return 0
+  fi
+  if [[ "$action" != "install" ]]; then
+    error "unknown tools command '$action'"
+    return 1
+  fi
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --dry-run) DRY_RUN="true" ;;
+      --email)
+        if [[ $# -lt 2 ]]; then
+          error "--email requires an email address"
+          return 1
+        fi
+        GITHUB_EMAIL="$2"
+        shift
+        ;;
+      -*)
+        error "unknown tools option '$1'"
+        return 1
+        ;;
+      *) args+=("$1") ;;
+    esac
+    shift
+  done
+  if [[ ${#args[@]} -eq 0 ]]; then
+    error "no tools selected; run '${SCRIPT_NAME} tools list' to see valid options"
+    return 1
+  fi
+
+  detect_package_manager
+  for name in "${args[@]}"; do
+    if ! record="$(tool_record "$name")"; then
+      error "unknown tool '$name'; run '${SCRIPT_NAME} tools list' to see valid options"
+      return 1
+    fi
+    IFS='|' read -r _ supported _ <<< "$record"
+    if ! supports_os "$supported"; then
+      error "tool '$name' is not supported on ${OS}"
+      return 1
+    fi
+    case "$name" in
+      zsh) install_zsh ;;
+      tmux) install_tmux ;;
+      github) install_github ;;
+      opencode) install_opencode ;;
+      nvim) install_nvim ;;
+    esac
+  done
+}
+
+require_stow() {
+  if ! command -v stow >/dev/null 2>&1; then
+    error "GNU Stow is required but was not found in PATH"
+    error "install it with your system package manager and try again"
+    return 1
+  fi
+}
+
+stow_component() {
+  local action="$1"
+  local component="$2"
+  local stow_action
+
+  if [[ ! -d "${DOTFILES_DIR}/${component}" ]]; then
+    error "component directory does not exist: ${DOTFILES_DIR}/${component}"
+    return 1
+  fi
+
+  if [[ "$action" == "install" ]]; then
+    stow_action="--restow"
+  else
+    stow_action="--delete"
+  fi
+
+  printf '%s %s\n' "$action" "$component"
+  stow --no-folding --simulate "$stow_action" --dir "$DOTFILES_DIR" --target "$HOME" "$component"
+  stow --no-folding "$stow_action" --dir "$DOTFILES_DIR" --target "$HOME" "$component"
+}
+
+cmd_stow() {
+  local action="$1"
+  shift
+  local enforce_os="true"
+  local component
+
+  [[ "$action" == "uninstall" ]] && enforce_os="false"
+  require_stow
+  select_components "$enforce_os" "$@"
+
+  for component in "${SELECTED[@]}"; do
+    stow_component "$action" "$component"
+  done
+}
+
+main() {
+  detect_os
+
+  if [[ $# -eq 0 ]]; then
+    usage
+    return 0
+  fi
+
+  local command="$1"
+  shift
+  case "$command" in
+    list) cmd_list "$@" ;;
+    install|uninstall) cmd_stow "$command" "$@" ;;
+    requirements) cmd_requirements "$@" ;;
+    tools) cmd_tools "$@" ;;
+    dev) cmd_dev "$@" ;;
+    project) cmd_project "$@" ;;
+    bootstrap) cmd_bootstrap "$@" ;;
+    help|-h|--help) usage ;;
+    *)
+      error "unknown command '$command'"
+      usage >&2
+      return 1
+      ;;
+  esac
+}
+
+main "$@"
