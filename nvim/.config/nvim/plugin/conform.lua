@@ -3,27 +3,8 @@ local function gh(repo) return 'https://github.com/' .. repo end
 -- [[Formatting]]
 vim.pack.add {
   gh 'stevearc/conform.nvim',
-  gh 'mason-org/mason.nvim',
-  gh 'WhoIsSethDaniel/mason-tool-installer.nvim',
 }
-local formatters_by_ft = {
-  lua = { "stylua" },
-  python = { "black" },
-  javascript = { "prettierd", "prettier", stop_after_first = true },
-  typescript = { "prettierd", " prettier", stop_after_first = true },
-  go = { "gofmt", "goimports" },
-}
-require('mason').setup()
-local mason_tool_installer = require("mason-tool-installer")
-local formatters = {}
-
-for _, ft_formatters in pairs(formatters_by_ft) do
-  for _, formatter in ipairs(ft_formatters) do
-    formatters[formatter] = true
-  end
-end
-
-mason_tool_installer.setup({ ensure_installed = vim.tbl_keys(formatters) })
+local formatters_by_ft = require("config.formatters")
 
 require('conform').setup({
   notify_on_error = false,
@@ -33,6 +14,7 @@ require('conform').setup({
       python = true,
       javascript = true,
       typescript = true,
+      vue = true,
       go = true,
     }
     if enabled_filetypes[vim.bo[bufnr].filetype] then

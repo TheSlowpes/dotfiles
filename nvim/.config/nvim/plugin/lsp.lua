@@ -62,20 +62,48 @@ vim.pack.add({
 -- Automatically install LSPs and related tools to stdpath for Neovim
 require("mason").setup({})
 
-local ensure_installed = {
+local servers = {
 	"lua_ls",
 	"pyright",
 	"gopls",
 	"sqls",
 	"vue_ls",
 	"vtsls",
-	"tsgo",
+	"tsc",
 }
 
+local ensure_installed = vim.list_extend({}, servers)
+local formatters = {}
+for _, ft_formatters in pairs(require("config.formatters")) do
+	for _, formatter in ipairs(ft_formatters) do
+		-- gofmt ships with Go rather than a Mason package.
+		if formatter ~= "gofmt" then
+			formatters[formatter] = true
+		end
+	end
+end
+vim.list_extend(ensure_installed, vim.fn.sort(vim.tbl_keys(formatters)))
 require("mason-tool-installer").setup({ ensure_installed = ensure_installed })
 
-for _, server in ipairs(ensure_installed) do
+vim.lsp.config("*", {
+	capabilities = require("cmp_nvim_lsp").default_capabilities(),
+})
+
+-- Preserve upstream TypeScript 7 binary discovery, but leave Vue to vtsls.
+local tsc_root_dir = vim.lsp.config.tsc.root_dir or {}
+vim.lsp.config("tsc", {
+	filetypes = { "javascript", "typescript" },
+	root_dir = function(bufnr, on_dir)
+		if not require("config.vue").is_vue_project(bufnr) then
+			tsc_root_dir(bufnr, on_dir)
+		end
+	end,
+})
+
+for _, server in ipairs(servers) do
 	local config_path = vim.fn.stdpath("config") .. "/lsp/" .. server .. ".lua"
-	vim.lsp.config(server, dofile(config_path))
+	if vim.fn.filereadable(config_path) == 1 then
+		vim.lsp.config(server, dofile(config_path))
+	end
 	vim.lsp.enable(server)
 end
