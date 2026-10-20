@@ -1,6 +1,6 @@
 ---@type vim.lsp.Config
 return {
-	cmd = { "pyright-langsever", "--stdio" },
+	cmd = { "pyright-langserver", "--stdio" },
 	filetypes = { "python" },
 	root_markers = {
 		"pyproject.toml",
