@@ -3,5 +3,11 @@ tmux/.config/tmux/.DS_Store
 tmux/.config/tmux/plugins/
 
 .ignore
-.opencode
+/.opencode
 *.session
+
+opencode/.config/opencode/node_modules/
+opencode/.config/opencode/package.json
+opencode/.config/opencode/package-lock.json
+opencode/.config/opencode/bun.lock
+opencode/.config/opencode/service.json
