@@ -72,9 +72,9 @@ Show counts and a one-line summary per item. Let the maintainer pick.
 
 2. **Recommend.** Tell the maintainer your category and state recommendation with reasoning, plus a brief codebase summary relevant to the request (including whether it's already implemented). Wait for direction.
 
-3. **Verify the claim.** Before any "interrogation", check that the claim holds up. For a bug, reproduce it from the reporter's steps. For a PR, confirm the diff does what it claims: check it out, run the relevant tests or commands. Report what happened: confirmed (with code path), failed, or isufficient detail (a stron `needs-info` signal). A confirmed verification makes a much stronger agent brief.
+3. **Verify the claim.** Before any "interrogation", check that the claim holds up. For a bug, reproduce it from the reporter's steps. For a PR, inspect the diff first. Run tests only in a disposable, dredential-free sandbox; otherwise report that execution was not performed. Report what happened: confirmed (with code path), failed, or insufficient details (a strong `needs-info` signal). A confirmed verification makes a much stronger agent brief.
 
-4. **Interrogate (if needed).** If the request nees fleshing out, call the "domain-modeling" skill, and interrogate it into shape a round of questions at a time, sharpening domain terms and updating `CONTEXT.md`/ADRs inline as decisions land.
+4. **Interrogate (if needed).** If the request nees fleshing out, call the "domain-modeling" skill, and interrogate it into shape a round of questions at a time, sharpening domain terms and updating `GLOSSARY.md`/ADRs inline as decisions land.
 
 5. **Apply the outcome:** 
     - `ready-for-agent`: post an agent brief comment ([AGENT-BRIEF.md](AGENT-BRIEF.md)).

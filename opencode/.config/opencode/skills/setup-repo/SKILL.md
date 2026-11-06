@@ -10,7 +10,7 @@ Scaffold the per-repo configuration that the engineering skills assume:
 
 - **Issue Tracker:** where issues live (Linear by default)
 - **Triage labels:** the strings used for the five canonical triage roles
-- **Doman docs:** where `CONTEXT.md` and ADRs live, and the consumer rules for reading them
+- **Domain docs:** where `GLOSSARY.md` and ADRs live, and the consumer rules for reading them
 
 This is a prompt-driven skill. Explore, present what you found, confirm with the user, then write.
 
@@ -22,7 +22,7 @@ Look at the current repo to understand its starting state. Read whatever exists;
 
 - `git remote -v` and `.git/config`: is this a GitHub repo? Which one?
 - `AGENTS.md` at the repo root: Does it exist? Is there already an `## Agent skills` section?
-- `CONTEXT.md` and `CONTEXT-MAP.md` at the repo root
+- `GLOSSARY.md` and `GLOSSARY-MAP.md` at the repo root
 - `docs/adr/` and any `src/*/docs/adr/` directories
 - `docs/agents/`: does this skill's prior output already exist?
 - Is the `triage` skill installed? (a `triage` skill folder alongside this one, or `triage` in your available skills.) This decides whether Section B runs at all.
@@ -40,12 +40,12 @@ Lead each section with the recommended answer so the user can accept it in a wor
 
 Default posture: these skills were designed for Linear. Always offer:
 - **Linear**: issues live in the project's Linear Issues (uses the `linear` mcp)
-- **GitHub**: issuer live int the repo's GitHub Issues (uses the `gh` CLI)
+- **GitHub**: issues live in the repo's GitHub Issues (uses the `gh` CLI)
 - **Local markdown**: issues live as files under `.scratch/<feature>/` in this repo (good for solo projects or repos without a remote)
 
 Record the choice in `docs/agents/issue-tracker.md`. The Linear and GitHub templates carry a "PRs as a request surface" flag, defaulted **off**. Leave it off and don't raise it: a user who wants external PRs in the triage queue can flip the flag in the file later.
 
-**Section B: Triage lable vocabulary.** Skip this section entirely if the `triage` skill isn't installed (exploration told you), since an uninstalled skill needs no labels.
+**Section B: Triage label vocabulary.** Skip this section entirely if the `triage` skill isn't installed (exploration told you), since an uninstalled skill needs no labels.
 
 If it is installed, ask exactly one question:
 
@@ -73,7 +73,7 @@ Let them edit before writing.
 - If `AGENTS.md` exists, edit it.
 - If it doesn't exist, create it.
 
-If an `## Agent skills` block aready exists in the files, update its contents in-place rather than appending a duplicate. Don't overwrite user edits to the surrounding sections.
+If an `## Agent skills` block already exists in the files, update its contents in-place rather than appending a duplicate. Don't overwrite user edits to the surrounding sections.
 
 The block:
 
@@ -101,7 +101,7 @@ Then write the docs files using the seed templates in this skill folder as a sta
 - [issue-tracker-linear.md](./issue-tracker-linear.md): Linear issue tracker
 - [issue-tracker-github.md](./issue-tracker-github.md): GitHub issue tracker
 - [issue-tracker-local.md](./issue-tracker-local.md): local-markdown issue tracker
-- [triage-labels.md](./triage-labels.md): label mapping (only if `triage` is istalled)
+- [triage-labels.md](./triage-labels.md): label mapping (only if `triage` is installed)
 - [domain.md](./domain.md): domain doc consumer rules + layout
 
 ### 5. Done

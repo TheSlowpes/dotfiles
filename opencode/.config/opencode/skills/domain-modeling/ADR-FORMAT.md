@@ -4,6 +4,9 @@ ADRs live in `docs/adr/` and use sequential numbering: `0001-slug.md`, `0002-slu
 
 Create the `docs/adr/` directory lazily: only when the first ADR is needed.
 
+In a multi-context repository, context-specific ADRs should be placed under paths such as `src/<context>/docs/adr/`,
+the ADR path and numbering are scoped to the selected context.
+
 ## Template
 
 ```md
@@ -24,7 +27,7 @@ Only include these when they add genuine value. Most ADRs won't need them.
 
 ## Numbering
 
-Scan `docs/adr/` for the highest existing number and increment by one.
+Scan `docs/adr/` or `src/<context>/docs/adr/`(in a multi-context repository) for the highest existing number and increment by one.
 
 ## When to offer an ADR
 

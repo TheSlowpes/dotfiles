@@ -58,7 +58,7 @@ Good:
 ```
 1. Open `src/auth.ts`
 2. Replace `verifyToken` (lines 42 to 58) with the snippet below
-3. Run `npm test -- auth.spec.tx`
+3. Run `npm test -- auth.spec.ts`
 ```
 
 ### 3. End with one concrete next action
@@ -93,7 +93,7 @@ Bad: "This will take some work". Good: "About 15 minutes if tests already cover 
 
 Show what now works, in concrete terms. Do not bury wins in a recap.
 
-Bad: "I've made some changes to the auth flow. Among other things..." Good: "Login now works with magic links. Try `npn run dev`, open `/login`".
+Bad: "I've made some changes to the auth flow. Among other things..." Good: "Login now works with magic links. Try `npm run dev`, open `/login`".
 
 ### 8. Matter-of-fact tone for errors
 
