@@ -1,6 +1,6 @@
 ---
 name: setup-repo
-description: "Configure this repo for the engineering skills: set up its issue tracker, triage label vocabulary, and domain doc layout. Run once before first use of the other engineering skills"
+description: "Configure this repo for the engineering skills: issue tracker, triage labels, domain doc layout, and toolchain (Taskfile, Worktrunk hooks, CI). Run once before first use of the other engineering skills"
 disable-model-invocation: true
 ---
 
@@ -11,6 +11,7 @@ Scaffold the per-repo configuration that the engineering skills assume:
 - **Issue Tracker:** where issues live (Linear by default)
 - **Triage labels:** the strings used for the five canonical triage roles
 - **Domain docs:** where `GLOSSARY.md` and ADRs live, and the consumer rules for reading them
+- **Toolchain:** a `Taskfile.yml` holding every command, Worktrunk hooks in `.config/wt.toml`, and CI jobs that call the same tasks. See [toolchain.md](./toolchain.md).
 
 This is a prompt-driven skill. Explore, present what you found, confirm with the user, then write.
 
@@ -28,6 +29,7 @@ Look at the current repo to understand its starting state. Read whatever exists;
 - Is the `triage` skill installed? (a `triage` skill folder alongside this one, or `triage` in your available skills.) This decides whether Section B runs at all.
 - Monorepo signals: a `pnpm-workspace.yaml`, a `workspaces` field in `package.json`, a populated `packages/*` with its own `src/`, the presence of `go.mod` alongside a `src/` directory,
 or more than one `main` package.
+- Toolchain: `Taskfile.yml`, `.config/wt.toml`, `.github/workflows/*`, and every other place commands hide (`package.json` scripts, `Makefile`, `scripts/`, README build steps). Note each command's env vars, build tags, secrets, and generated-asset prerequisites. A fresh `wt switch --create` worktree is the test: what must run before `test` passes there?
 
 ### 2. Present findings and ask
 
@@ -59,12 +61,21 @@ write it without asking.
 Offer **multi-context** (a root `CONTEXT-MAP.md` pointing to per-context `CONTEXT.md` files) only when exploration found monorepo signals.
 Then confirm which layout they want.
 
+**Section D: Toolchain.** Read [toolchain.md](./toolchain.md). Draft, without asking:
+
+- `Taskfile.yml` if missing, or the canonical tasks it lacks. Build tasks from the commands exploration found, carrying their env vars and tags. When CI already exists, `ci` reproduces its job steps exactly.
+- `.config/wt.toml` with the `pre-start`, `pre-commit`, and `pre-merge` hooks.
+- CI workflow edits that swap raw job steps for task calls. If the repo has no CI, ask one question: add a workflow that runs `task ci`? (recommended: **yes**)
+
+Ask only about what exploration could not settle: a secret's source, or a command whose purpose is unclear.
+
 ### 3. Confirm and edit
 
 Show the user a draft of:
 
 - The `## Agent skills` block to add to `AGENTS.md`
 - The contents of `docs/agents/issue-tracker.md`, `docs/agents/domain.md`, and `docs/agents/triage-labels.md` (the last only when `triage` is installed)
+- The `Taskfile.yml`, `.config/wt.toml`, and CI workflow changes
 
 Let them edit before writing.
 
@@ -91,6 +102,10 @@ The block:
 ### Domain docs
 
 [one-line summary of layout: "single-context" or "multi-context"]. See `docs/agents/domain.md`
+
+### Commands
+
+Run builds, tests, and checks through `task` (`task --list`); raw toolchain commands miss required env vars. `task ci` is what CI and `wt merge` run.
 ```
 
 Include the `### Triage labels` sub-block, and write `docs/agents/triage-labels.md`, only when `triage` is installed and Section B ran.
@@ -104,6 +119,12 @@ Then write the docs files using the seed templates in this skill folder as a sta
 - [triage-labels.md](./triage-labels.md): label mapping (only if `triage` is installed)
 - [domain.md](./domain.md): domain doc consumer rules + layout
 
+Then write the toolchain files and verify them. Done means all three pass:
+
+- `task --list` shows every task with a description.
+- `task ci` passes in the current worktree.
+- In a fresh `wt switch --create <scratch> --no-cd` worktree, after the user runs `! wt config approvals add`, `wt hook pre-merge` passes. Remove it after with `wt remove <scratch> -D`.
+
 ### 5. Done
 
-Tell the user the setup is complete and which engineering skills will now read from these files. Mention they can edit `docs/agents/*.md` directly later; re-running this skill is only necessary if they want to switch issue trackers or restart from scratch.
+Tell the user the setup is complete and which engineering skills will now read from these files. Mention they can edit `docs/agents/*.md` directly later; re-running this skill is only necessary if they want to switch issue trackers or restart from scratch. Keeping the toolchain current is `/maintain-repo`'s job.

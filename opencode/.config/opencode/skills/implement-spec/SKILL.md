@@ -16,25 +16,37 @@ Communication to and from subagents should be sparse. Communicate primarily thro
 
 **Implementer subagents** should be run in the background where possible for maximum concurrency.
 
+## Worktrees
+
+Worktrunk (`wt`) owns every worktree. Its project hooks in `.config/wt.toml` make a fresh worktree runnable (`post-start`) and gate every merge on the repo's checks (`pre-merge`), so a branch that reaches the integration branch has already passed them. See `wt <command> --help`.
+
+- Agent shells have no `wt` shell integration: always pass `--no-cd`, and address worktrees with `wt -C <path>` or the shell's working directory.
+- Run every build, test, and check through `task` (`task --list`). Raw toolchain commands skip the env vars, tags, and generated assets the tasks carry.
+- An unapproved hook is skipped, which silently skips the checks. Hooks must be approved before any worktree is created.
+
 ## Steps
 
 1. Read the spec and issues to understand the task graph.
 
-2. (optional) Use an **exploration subagent** to conduct any exploration required by the issues; relevant codebase files or external documentation. Ensure the exploration subagent can save files, it should save its markdown notes in a directory outside the repo, accessible by all future subagents. This lets **implementer subagents** focus on implementation rather than exploration.
+2. Confirm the repo is wired: `Taskfile.yml` and `.config/wt.toml` exist, and `wt hook show` lists a `pre-merge` hook. If any is missing, stop and tell the user to run `/setup-repo`. Then ask the user to run `! wt config approvals add` once, so hooks run without prompts.
 
-3. Create the first **integration branch** and initiate a new stack with `gh stack init`.
+3. (optional) Use an **exploration subagent** to conduct any exploration required by the issues; relevant codebase files or external documentation. Ensure the exploration subagent can save files, it should save its markdown notes in a directory outside the repo, accessible by all future subagents. This lets **implementer subagents** focus on implementation rather than exploration.
 
-4. Use **implementer subagents** to implement each issue, each in its own worktree on its own branch. Each implementer subagent:
-    - confirms its worktree is based on the integration branch before starting, and resets onto it if not;
-    - implements the issue according to the documented repo conventions;
-    - merges the integration branch tip into its own branch before reporting done
+4. Create the first **integration branch** in its own worktree with `wt switch --create <branch> --no-cd`, then run `gh stack init <branch>` inside that worktree to start the stack. The **integration worktree** is the only place `gh stack` runs.
 
-5. Once an **implementer subagent** completes, merge its work to the integration branch with a **merger subagent**.
+5. Use **implementer subagents** to implement each issue. Create each one's worktree before dispatching it, with `wt switch --create <issue-branch> --base <integration-branch> --no-cd`, and hand the subagent the worktree path. Each implementer subagent:
+    - implements the issue according to the documented repo conventions, inside its worktree only;
+    - commits its work following the repo's commit conventions;
+    - reports done only once `wt hook pre-merge` passes in its worktree.
 
-6. If this changes the **frontier** of available issues, use the coderabbit cli (see `coderabbit --help`) to review the current state of the code and use **implementer subagents** to address any issues. Once coderabbit returns no findings, add a new branch to the stack (`gh stack add`) and kick off more **implementer subagents** to work on the newly unblocked issues. This allows for maximum concurrency.
+6. Once an **implementer subagent** completes, merge its branch from the integration worktree: `wt merge <integration-branch> --branch <issue-branch> --no-squash`. This rebases, runs the `pre-merge` hooks, fast-forwards the integration branch, and removes the issue worktree. Run merges one at a time. If the rebase conflicts or a hook fails, the issue worktree is left in place: send the failure back to its implementer subagent and retry the merge once it reports done.
 
-7. Once all issuer are complete, call the Skill tool with `code-review` on the top branch against `main`. Fix all issues raised by the code review in a single **implementer subagent**.
+7. If this changes the **frontier** of available issues, use the coderabbit cli (see `coderabbit --help`) to review the current state of the code and use **implementer subagents** to address any issues. Once coderabbit returns no findings, add a new branch to the stack (`gh stack add <branch>` in the integration worktree) and kick off more **implementer subagents** based on it. This allows for maximum concurrency.
 
-8. Use `gh stack submit` to create PRs for the stack.
+8. Once all issues are complete, call the Skill tool with `code-review` on the top branch against `main`. Fix all issues raised by the code review in a single **implementer subagent**, merged back as in step 6.
 
-9. Clean up all **implementer subagent** worktrees.
+9. Run the repo's CI task (the one `.github/workflows` calls) in the integration worktree. It must pass before anything is pushed.
+
+10. Use `gh stack submit` to create PRs for the stack, then `gh pr checks --watch` on each PR. The work is done when every check on every PR is green; "unverified on platform X" is not done. Fix a red check with an **implementer subagent** on the failing PR's own branch, then `gh stack rebase` so the branches above pick it up. Note the gap between local checks and CI for `/maintain-repo`.
+
+11. Clean up: `wt list` should show no issue worktrees left. Remove the integration worktree with `wt remove <integration-branch> --no-delete-branch`.
