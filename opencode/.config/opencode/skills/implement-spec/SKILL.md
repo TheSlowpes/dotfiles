@@ -18,7 +18,7 @@ Communication to and from subagents should be sparse. Communicate primarily thro
 
 ## Worktrees
 
-Worktrunk (`wt`) owns every worktree. Its project hooks in `.config/wt.toml` make a fresh worktree runnable (`post-start`) and gate every merge on the repo's checks (`pre-merge`), so a branch that reaches the integration branch has already passed them. See `wt <command> --help`.
+Worktrunk (`wt`) owns every worktree. Its project hooks in `.config/wt.toml` make a fresh worktree runnable (`pre-start`) and gate every merge on the repo's checks (`pre-merge`), so a branch that reaches the integration branch has already passed them. Required setup finishes before implementer dispatch; `post-start` is only for optional background work. See `wt <command> --help`.
 
 - Agent shells have no `wt` shell integration: always pass `--no-cd`, and address worktrees with `wt -C <path>` or the shell's working directory.
 - Run every build, test, and check through `task` (`task --list`). Raw toolchain commands skip the env vars, tags, and generated assets the tasks carry.
@@ -41,12 +41,12 @@ Worktrunk (`wt`) owns every worktree. Its project hooks in `.config/wt.toml` mak
 
 6. Once an **implementer subagent** completes, merge its branch from the integration worktree: `wt merge <integration-branch> --branch <issue-branch> --no-squash`. This rebases, runs the `pre-merge` hooks, fast-forwards the integration branch, and removes the issue worktree. Run merges one at a time. If the rebase conflicts or a hook fails, the issue worktree is left in place: send the failure back to its implementer subagent and retry the merge once it reports done.
 
-7. If this changes the **frontier** of available issues, use the coderabbit cli (see `coderabbit --help`) to review the current state of the code and use **implementer subagents** to address any issues. Once coderabbit returns no findings, add a new branch to the stack (`gh stack add <branch>` in the integration worktree) and kick off more **implementer subagents** based on it. This allows for maximum concurrency.
+7. If this changes the **frontier** of available issues, use the coderabbit cli (see `coderabbit --help`) to review the current state of the code and use **implementer subagents** to address any issues on the current integration branch. Once coderabbit returns no findings, add a new branch to the stack only if there are undispatched issues ready to implement (`gh stack add <branch>` in the integration worktree). Set `<integration-branch>` to this new top branch before dispatching more implementers or merging any completed work, including work already in flight. The integration worktree now holds the new top branch. An empty frontier adds no branch; wait for in-flight work, or proceed to step 8 when all issues are complete.
 
 8. Once all issues are complete, call the Skill tool with `code-review` on the top branch against `main`. Fix all issues raised by the code review in a single **implementer subagent**, merged back as in step 6.
 
 9. Run the repo's CI task (the one `.github/workflows` calls) in the integration worktree. It must pass before anything is pushed.
 
-10. Use `gh stack submit` to create PRs for the stack, then `gh pr checks --watch` on each PR. The work is done when every check on every PR is green; "unverified on platform X" is not done. Fix a red check with an **implementer subagent** on the failing PR's own branch, then merge that branch into each branch above it, bottom to top, each in its own worktree (`git merge`, not `gh stack rebase`: rebasing branches checked out in several worktrees, or containing merges, fails or replays resolved conflicts). Note the gap between local checks and CI for `/maintain-repo`.
+10. Use `gh stack submit` to create PRs for the stack, then `gh pr checks --watch` on each PR. The work is done when every check on every PR is green; "unverified on platform X" is not done. Fix a red check with an **implementer subagent** on the failing PR's own branch, then merge that branch into each branch above it, bottom to top, each in its own worktree (`git merge`, not `gh stack rebase`: rebasing branches checked out in several worktrees, or containing merges, fails or replays resolved conflicts). Run each updated branch's CI task and push it to its PR's remote branch from its own worktree, bottom to top. Confirm each PR's head matches the pushed commit before running `gh pr checks --watch` again; wait for checks on the new commits rather than accepting old results. Note the gap between local checks and CI for `/maintain-repo`.
 
 11. Clean up: `wt list` should show no issue worktrees left. Remove the integration worktree with `wt remove <integration-branch> --no-delete-branch`.

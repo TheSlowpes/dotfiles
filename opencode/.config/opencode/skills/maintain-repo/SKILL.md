@@ -28,7 +28,7 @@ The highest-yield category: an agent working around a missing task repeats the w
 - **Env vars and secrets**: a command failed until an env var, build tag, or secret was set by hand. Move it into the task. A task that can block (a locked secret store, an interactive prompt) fails fast with a message naming the fix.
 - **New commands**: the session added a script, tool, generator, or service. It gets a task with a `desc`, and the `setup` or `ci` task calls it if a fresh checkout or CI needs it.
 - **Cold worktrees**: a fresh worktree failed until something was installed or generated. That step belongs in `setup`, run by the `pre-start` hook.
-- **Generated files**: a generated file is either fully tracked or fully ignored. Partly tracked output causes dirty trees and merge conflicts; untrack it and generate it in `setup`.
+- **Generated files**: keep generated source or embedded assets tracked when package consumers need them without running generation. Ignore disposable output and generate it in `setup`. Mixed directories are valid when tracked and ignored outputs serve different purposes; classify each output before changing tracking.
 
 ### CI parity
 

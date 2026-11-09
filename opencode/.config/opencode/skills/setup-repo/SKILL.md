@@ -26,6 +26,7 @@ Look at the current repo to understand its starting state. Read whatever exists;
 - `GLOSSARY.md` and `GLOSSARY-MAP.md` at the repo root
 - `docs/adr/` and any `src/*/docs/adr/` directories
 - `docs/agents/`: does this skill's prior output already exist?
+- If GitHub is the selected tracker, inspect existing repository labels with `gh label list --limit 1000`. If the limit is reached, paginate the labels API before deciding which mapped labels are missing.
 - Is the `triage` skill installed? (a `triage` skill folder alongside this one, or `triage` in your available skills.) This decides whether Section B runs at all.
 - Monorepo signals: a `pnpm-workspace.yaml`, a `workspaces` field in `package.json`, a populated `packages/*` with its own `src/`, the presence of `go.mod` alongside a `src/` directory,
 or more than one `main` package.
@@ -76,6 +77,7 @@ Show the user a draft of:
 - The `## Agent skills` block to add to `AGENTS.md`
 - The contents of `docs/agents/issue-tracker.md`, `docs/agents/domain.md`, and `docs/agents/triage-labels.md` (the last only when `triage` is installed)
 - The `Taskfile.yml`, `.config/wt.toml`, and CI workflow changes
+- For GitHub, the mapped labels that are missing and will be created. Include their names, descriptions, and colors in the draft; existing labels stay unchanged.
 
 Let them edit before writing.
 
@@ -119,11 +121,21 @@ Then write the docs files using the seed templates in this skill folder as a sta
 - [triage-labels.md](./triage-labels.md): label mapping (only if `triage` is installed)
 - [domain.md](./domain.md): domain doc consumer rules + layout
 
+For GitHub, create only the missing labels approved in step 3 with `gh label create`, using the approved names, descriptions, and colors. Recheck existing labels before creation and leave them unchanged. Verify every mapped label exists before declaring setup complete; if creation fails, report the failure and pause rather than publishing issues with missing labels.
+
 Then write the toolchain files and verify them. Done means all three pass:
 
 - `task --list` shows every task with a description.
 - `task ci` passes in the current worktree.
-- In a fresh `wt switch --create <scratch> --no-cd` worktree, after the user runs `! wt config approvals add`, `wt hook pre-merge` passes. Remove it after with `wt remove <scratch> -D`.
+- Fresh-worktree verification passes using the committed setup files, following the sequence below.
+
+For fresh-worktree verification:
+
+1. Ask the user to commit the approved setup files and pause until they have done so. Verify those files have no uncommitted changes and record the full commit SHA with `git rev-parse HEAD`.
+2. Ask the user to run `! wt config approvals add` in the current worktree before creating the scratch worktree.
+3. Create `wt switch --create <scratch> --base <setup-commit-sha> --no-cd`. Verify its HEAD matches the recorded SHA and that `pre-start` ran successfully. A skipped or failed setup hook is not a pass.
+4. Run `wt hook pre-merge` in the scratch worktree. It must pass with the committed configuration.
+5. Remove the scratch worktree with `wt remove <scratch>` once verification passes. If verification fails, preserve it for diagnosis and report the failure.
 
 ### 5. Done
 

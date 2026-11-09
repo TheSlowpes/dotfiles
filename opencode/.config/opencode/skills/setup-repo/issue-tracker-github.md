@@ -5,8 +5,8 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 ## Conventions
 
 - **Create an issue**: `gh issue create --title "..." --body "..."`. Use a heredoc for multi-line bodies.
-- **Read an issue**: `gh issue view <number> --comments`, filtering comments by `jq` and also fetching labels.
-- **List issues**: `gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'` with appropriate `--label` and `--state` filters.
+- **Read an issue**: `gh issue view <number> --json number,title,body,labels,comments,author,createdAt,updatedAt`. Filter this structured output with `jq` or `--jq` as needed.
+- **List issues**: `gh issue list --state open --limit 1000 --search 'sort:created-asc' --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'` with appropriate `--label` and `--state` filters. This retrieves the oldest issues first. If it returns 1000 items, treat the queue as incomplete: split the search into `created:` date ranges and fetch every range, narrowing any range that still returns 1000. Preserve the label/state filters, deduplicate issue numbers at range boundaries, and present the combined queue oldest first. If a single-day range still reaches the search cap, use a paginated API query instead and report any retrieval limit rather than presenting a partial queue as complete.
 - **Comment on an issue**: `gh issue comment <number> --body "..."`
 - **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
 - **Close**: `gh issue close <number> --comment "..."`
@@ -31,4 +31,4 @@ Create a GitHub issue.
 
 ## When a skill says "fetch the relevant issue"
 
-Run `gh issue view <number> --comments`.
+Use the structured **Read an issue** command above so the body, labels, and comments are all available.

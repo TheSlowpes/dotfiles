@@ -14,16 +14,16 @@ When an agent, a worktree hook, and CI all call the same task, "passes locally" 
 ## Taskfile.yml
 
 - Every task has a `desc`, so `task --list` is the command reference. No separate commands doc.
-- Env vars the toolchain needs (`CGO_ENABLED`, build tags, compiler flags) live on the task or in the top-level `env:`/`vars:`. A command that only works with an env var set by hand is broken.
+- Environment variables the toolchain needs, such as `CGO_ENABLED` and `GOFLAGS`, live in task-level or top-level `env:` so commands receive them. Use `vars:` for template values, such as build tags and compiler flags explicitly interpolated into commands; `vars:` alone does not export environment variables. A command that only works with an env var set by hand is broken.
 - Secrets are loaded by the task from the secret store (e.g. `gopass`), never pasted into the Taskfile. Name every required secret in the task's `desc` or a comment above it. Tasks run non-interactively: a locked store or missing secret fails fast with a message naming the fix, never a prompt or a hang.
-- Generated or embedded assets a fresh checkout lacks get a `setup` (or `ci:prepare`) task, and every task that needs them depends on it. Generated output is fully gitignored; partly tracked output causes dirty trees and merge conflicts.
+- Generated or embedded assets a fresh checkout lacks get a `setup` (or `ci:prepare`) task, and every task that needs them depends on it. Keep generated source or embedded assets tracked when package consumers need them without running generation. Ignore disposable generated output. Classify outputs by how they are consumed rather than untracking required files to make an entire directory ignored.
 - Any command an agent needs repeatedly gets a task, including cross-builds and platform tests. A workaround that lives only in session history gets reinvented every session.
 
-Canonical tasks. Use the names the repo already has; add only what is missing:
+Canonical tasks. Preserve existing task implementations and add aliases for the names below when the repo uses different names. For example, `setup` can depend on an existing `bootstrap` task. Hooks and CI can then call the canonical names consistently:
 
 | Task | Runs | Called by |
 | --- | --- | --- |
-| `setup` | install deps, generate code and assets on a fresh checkout | `post-start` hook, CI first step |
+| `setup` | install deps, generate code and assets on a fresh checkout | `pre-start` hook, CI first step |
 | `check` | fast checks: format, lint, typecheck | `pre-commit` hook |
 | `test` | the test suite with every required env var and tag | agents, `ci` |
 | `ci` | exactly what CI runs on Linux: `setup`, `check`, `test`, build | `pre-merge` hook, CI job |
