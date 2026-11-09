@@ -13,6 +13,16 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 
 Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.
 
+## Complete discussions
+
+Treat comments embedded in list results as a preview; `gh issue list` includes at most the first 100 comments per issue. Before evaluating reporter activity or resuming triage for a candidate, fetch its complete discussion:
+
+```sh
+gh api --paginate 'repos/{owner}/{repo}/issues/<number>/comments?per_page=100' --jq '.[] | {id, author: .user.login, body, createdAt: .created_at, updatedAt: .updated_at}'
+```
+
+Use all pages alongside the issue body and labels from **Read an issue**. This endpoint also retrieves PR conversation comments; for PR triage, additionally paginate `repos/{owner}/{repo}/pulls/<number>/comments` and `repos/{owner}/{repo}/pulls/<number>/reviews` for inline comments and reviews. Report any retrieval failure instead of treating missing comments as no reporter activity.
+
 ## Pull requests as a triage surface
 
 **PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_

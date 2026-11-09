@@ -26,7 +26,6 @@ Look at the current repo to understand its starting state. Read whatever exists;
 - `GLOSSARY.md` and `GLOSSARY-MAP.md` at the repo root
 - `docs/adr/` and any `src/*/docs/adr/` directories
 - `docs/agents/`: does this skill's prior output already exist?
-- If GitHub is the selected tracker, inspect existing repository labels with `gh label list --limit 1000`. If the limit is reached, paginate the labels API before deciding which mapped labels are missing.
 - Is the `triage` skill installed? (a `triage` skill folder alongside this one, or `triage` in your available skills.) This decides whether Section B runs at all.
 - Monorepo signals: a `pnpm-workspace.yaml`, a `workspaces` field in `package.json`, a populated `packages/*` with its own `src/`, the presence of `go.mod` alongside a `src/` directory,
 or more than one `main` package.
@@ -55,6 +54,8 @@ If it is installed, ask exactly one question:
 > Do you want to keep the default triage labels? (recommended: **yes**)
 
 The defaults are the five canonical roles, each label string equal to its name: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. On **yes**, write them as-is. Only if the user says no, usually because their tracker already uses other names (e.g. `bug:triage` for `needs-triage`), collect the overrides so `triage` applies existing labels instead of creating duplicates.
+
+After Section A has selected GitHub and the label mapping is settled, inspect existing repository labels with `gh label list --limit 1000`. If the limit is reached, paginate the labels API. Compare the complete label list against the mapping before preparing the approval draft in step 3, including on first setup.
 
 **Section C: Domain docs.** Default to **single-context** (one `CONTEXT.md` + `docs/adr/` at the repo root). This fits almost every repo;
 write it without asking.

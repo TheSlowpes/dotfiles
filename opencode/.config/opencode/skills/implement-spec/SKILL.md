@@ -47,6 +47,16 @@ Worktrunk (`wt`) owns every worktree. Its project hooks in `.config/wt.toml` mak
 
 9. Run the repo's CI task (the one `.github/workflows` calls) in the integration worktree. It must pass before anything is pushed.
 
-10. Use `gh stack submit` to create PRs for the stack, then `gh pr checks --watch` on each PR. The work is done when every check on every PR is green; "unverified on platform X" is not done. Fix a red check with an **implementer subagent** on the failing PR's own branch, then merge that branch into each branch above it, bottom to top, each in its own worktree (`git merge`, not `gh stack rebase`: rebasing branches checked out in several worktrees, or containing merges, fails or replays resolved conflicts). Run each updated branch's CI task and push it to its PR's remote branch from its own worktree, bottom to top. Confirm each PR's head matches the pushed commit before running `gh pr checks --watch` again; wait for checks on the new commits rather than accepting old results. Note the gap between local checks and CI for `/maintain-repo`.
+10. Use `gh stack submit` to create PRs for the stack, then `gh pr checks --watch` on each PR. The work is done when every check on every PR is green and the stack has linear history between its branches; "unverified on platform X" is not done. For red checks, follow **CI fix recovery** below. Note the gap between local checks and CI for `/maintain-repo`.
 
 11. Clean up: `wt list` should show no issue worktrees left. Remove the integration worktree with `wt remove <integration-branch> --no-delete-branch`.
+
+## CI fix recovery
+
+Restack sequentially in each branch's own worktree. Keep the stack linear instead of merging a changed lower branch into an upper branch.
+
+1. Before fixing anything, pause implementers and require clean worktrees for the failing branch and every branch above it. Use `wt` to create any missing worktrees. Record the stack order, each branch's old local tip, and its published remote tip. Verify adjacent branches form an ancestor chain and local tips match published tips. If history has already diverged or contains merge commits between layers, stop and ask how to repair it rather than replaying an ambiguous range.
+2. Dispatch an **implementer subagent** to fix and commit on the failing PR's branch in its own worktree. Preserve the old tips recorded before the fix.
+3. For each upper branch, bottom to top, run `git rebase --onto <updated-parent-tip> <old-parent-tip>` in that branch's worktree. Use its immediate parent's recorded old tip as the boundary, even after that parent has been rebased. This replays only the upper branch's own commits. Resolve conflicts there and run `git rebase --continue`; if the resolution requires a decision, pause and ask. Finish each rebase before starting the next.
+4. Run each changed branch's CI task in its worktree and verify each parent tip is an ancestor of the branch above it. Ask for approval before pushing rewritten history, naming the affected branches. After approval, push bottom to top to each PR's remote branch. For rewritten branches, use `--force-with-lease=refs/heads/<remote-branch>:<recorded-remote-tip>`; a rejected lease means stop and inspect the remote changes, not overwrite them.
+5. Confirm each PR's head matches its pushed commit before running `gh pr checks --watch` again. Wait for checks on the new commits rather than accepting old results. Recovery is complete only when the linear stack passes every required check.
