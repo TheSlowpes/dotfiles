@@ -47,6 +47,6 @@ Worktrunk (`wt`) owns every worktree. Its project hooks in `.config/wt.toml` mak
 
 9. Run the repo's CI task (the one `.github/workflows` calls) in the integration worktree. It must pass before anything is pushed.
 
-10. Use `gh stack submit` to create PRs for the stack, then `gh pr checks --watch` on each PR. The work is done when every check on every PR is green; "unverified on platform X" is not done. Fix a red check with an **implementer subagent** on the failing PR's own branch, then `gh stack rebase` so the branches above pick it up. Note the gap between local checks and CI for `/maintain-repo`.
+10. Use `gh stack submit` to create PRs for the stack, then `gh pr checks --watch` on each PR. The work is done when every check on every PR is green; "unverified on platform X" is not done. Fix a red check with an **implementer subagent** on the failing PR's own branch, then merge that branch into each branch above it, bottom to top, each in its own worktree (`git merge`, not `gh stack rebase`: rebasing branches checked out in several worktrees, or containing merges, fails or replays resolved conflicts). Note the gap between local checks and CI for `/maintain-repo`.
 
 11. Clean up: `wt list` should show no issue worktrees left. Remove the integration worktree with `wt remove <integration-branch> --no-delete-branch`.

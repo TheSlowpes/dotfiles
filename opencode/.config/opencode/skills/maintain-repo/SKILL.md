@@ -35,7 +35,7 @@ The highest-yield category: an agent working around a missing task repeats the w
 - **Red PR checks**: find the CI step that failed and the local step that should have caught it. Fix the gap so `task ci` (the `pre-merge` hook) catches it next time.
 - **Unreachable platforms**: a CI job targets a platform the agent cannot run (e.g. Windows from Linux). If the dev host can reach that platform (WSL can run `.exe` through `powershell.exe`), add a task that runs those tests there. If it cannot, the task's `desc` says so, and `gh pr checks` becomes the gate. An agent that reports a platform as "unverified" and pushes anyway is this finding.
 - **Drifted jobs**: CI steps that run raw commands instead of tasks. Move them into the Taskfile.
-- **Stack fixes**: a fix for one PR in a stack landed on a different branch, leaving that PR red. The fix lands on the failing PR's branch, then the stack is rebased.
+- **Stack fixes**: a fix for one PR in a stack landed on a different branch, leaving that PR red. The fix lands on the failing PR's branch, then is merged upward into each branch above it.
 
 ### Automated checks
 
